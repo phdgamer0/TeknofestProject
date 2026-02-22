@@ -75,10 +75,10 @@ double Vector3D::angleTo(const Vector3D& other) const {
     cosAngle = std::max(-1.0, std::min(1.0, cosAngle));
     return toDegrees(std::acos(cosAngle));
 }
-double Vector3D::yawTo(const Vector3D& other) const{
+double Vector3D::YawTo(const Vector3D& other) const{
     return toDegrees(std::atan2(other[1] - this->y, other[0] - this->x));
 }
-double Vector3D::pitchTo(const Vector3D& other) const{
+double Vector3D::PitchTo(const Vector3D& other) const{
     return toDegrees(std::atan2(other[2] - this->z, std::hypot(other[0] - this->x, other[1] - this->y)));
 }
 std::ostream& operator<<(std::ostream& os, const Vector3D& vec) {

@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <algorithm>
+
 /*
 	================================================
 	| IMPORTANT : coorrdinates are in meters,      |
@@ -11,6 +12,7 @@
 	| velocity is in m/s, acceleration is in m/s^2 |
 	================================================
 */
+
 extern const double TIME_UNDER_FIRE;
 double toRadians(double degrees);
 double toDegrees(double radians);
@@ -32,11 +34,14 @@ typedef struct Vector3D{
     double magnitude() const; // magnitude of the vector
     double distanceTo(const Vector3D& other) const; // distance to another vector
     double angleTo(const Vector3D& other) const; // angle to another vector in radians
+    double YawTo(const Vector3D& other) const; // yaw angle to another vector in degrees
+    double PitchTo(const Vector3D& other) const; // pitch angle to another vector in degrees
 	friend std::ostream& operator<<(std::ostream& os, const Vector3D& vec);
     ~Vector3D() = default;
 } vec;
 typedef struct Object{
     vec pos, vel, acc; // position, velocity, acceleration
+    u_int8_t ID;
     bool isFriendly, isAlive; 
     double timeUnderFire=0.0;
     Object(vec p, vec v = vec(0,0,0), vec a = vec(0,0,0), bool isFriendly = false) : 

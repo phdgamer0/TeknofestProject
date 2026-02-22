@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip>
-std::string signalToString(sig signal){
+inline std::string signalToString(sig signal){
     switch (signal.signal){
         case SIGNALS::CAM_MOVE: return "CAM_MOVE";
         case SIGNALS::CAM_STOP: return "CAM_STOP";
@@ -52,6 +52,15 @@ std::string signalToString(sig signal){
         default: return "UNKNOWN_SIGNAL";
     }
 }
+inline std::string priorityToString(Priority priority){
+    switch (priority){
+        case Priority::CRITICAL: return "CRITICAL";
+        case Priority::IMPORTANT: return "IMPORTANT";
+        case Priority::NORMAL: return "NORMAL";
+        case Priority::LOG: return "LOG";
+        default: return "UNKNOWN_PRIORITY";
+    }
+}
 Logger::Logger(const std::string& filename) {
     logFile.open(filename, std::ios::out | std::ios::app); // open the log file for appending
     if (!logFile.is_open()) {
@@ -79,6 +88,9 @@ void Logger::logSignal(const sig& signal) {
         logFile << "Signal: " << static_cast<int>(signal.signal) << ", Data Type: " << static_cast<int>(signal.dataType);
         if (signal.data != nullptr) {
             switch (signal.dataType) {
+                case DataTypes::NONE:{
+                    break;
+                }
                 case DataTypes::VEC_3D: {
                     vec* dataVec = static_cast<vec*>(signal.data);
                     logFile << ", Data: (" << dataVec->x << ", " << dataVec->y << ", " << dataVec->z << ")";
@@ -104,8 +116,9 @@ void Logger::logSignal(const sig& signal) {
                     logFile << ", Data: " << (*dataBool ? "true" : "false");
                     break;
                 }
-                default:
+                default:{
                     logFile << ", Data: [Unknown Type]";
+                }
             }
             logFile << std::endl;
         }

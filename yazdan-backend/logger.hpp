@@ -12,4 +12,5 @@ public:
     void log(const std::string& message); // log a message to the file with a timestamp
     void logSignal(const sig& signal); // log a signal with its type and data
 };
-std::string signalToString(const sig& signal); // helper function to convert signal to string for logging
+inline std::string signalToString(const sig& signal); // helper function to convert signal to string for logging
+inline std::string priorityToString(Priority priority); // helper function to convert priority level to string for logging

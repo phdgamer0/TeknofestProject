@@ -55,20 +55,34 @@ enum class SIGNALS:uint8_t{
     SYSTEM_RESUME,
 };
 enum class DataTypes:uint8_t{
+    NONE,
     VEC_3D,
     STRING,
     INTEGER,
     FLOAT,
     BOOLEAN,
 };
+enum class Priority:uint8_t{
+    CRITICAL,
+    IMPORTANT,
+    NORMAL,
+    LOG,
+};
 typedef struct Signal{
     SIGNALS signal;
     DataTypes dataType; // type of the data being transmitted with the signal
-    void* data = nullptr; // optional data pointer for signal parameters
+    Priority priorityLevel; // priority level of the signal
+    void* data; // optional data pointer for signal parameters
+    Signal(SIGNALS signal, DataTypes dataType = DataTypes::NONE, Priority priorityLevel = Priority::NORMAL, void* data = nullptr) :
+        signal(signal), dataType(dataType), priorityLevel(priorityLevel), data(data) {};
+    ~Signal() = default;
 }sig;
 class CommunicatorDevice{
 private:
-    std::queue<sig> signalQueue; // queue to hold incoming signals
+    std::queue<sig> criticalQueue; // queue to hold critical signals that need immediate attention
+    std::queue<sig> importantQueue; // queue to hold important signals that need attention  
+    std::queue<sig> normalQueue; // queue to hold incoming signals
+    std::queue<sig> logQueue; // queue to hold log signals for debugging and monitoring
 public:
     void Transmit(CommunicatorDevice& receiver, sig signal); // transmit a signal to another device
     void Receive(sig signal); // receive a signal and add it to the queue

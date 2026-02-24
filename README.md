@@ -175,5 +175,74 @@ Emin değilseniz:
 
 > Önce sorun, sonra işlem yapın.
 
-Repoyu nüklemek istemiyoruz 😅
+---
 
+# 👥 Proje Ekibi
+
+### **Beyza Nur Asrlan**
+
+**GitHub:** `@beyzarsln`
+Yan eksen hareket mekanizmasının tasarımı ve optimizasyonundan sorumludur. Kritik tasarım raporlarının hazırlanmasını yürütmektedir.
+
+---
+
+### **Yağmur Yaz**
+
+**GitHub:** `@yagmuryaz`
+Yan eksen hareketinin hassas şekilde ayarlanması ve sistem performans doğrulama süreçlerinde görev almaktadır. Teknik dokümantasyon çalışmalarına katkı sağlamaktadır.
+
+---
+
+### **Canay Gürsoy**
+
+**GitHub:** `@canaygursoy`
+Yükseliş (dikey) eksen hareketinin ayarlanması ve sistem stabilitesinin sağlanmasından sorumludur. Kritik tasarım ve analiz raporlarını hazırlamaktadır.
+
+---
+
+### **Zümra**
+
+**GitHub:** `@Zumra61`
+Sistem elektrik bağlantılarının tasarımı, kurulumu ve güvenliğinin sağlanmasından sorumludur. Elektrik altyapısının düzenli ve standartlara uygun çalışmasını koordine etmektedir.
+
+---
+
+### **Nazifcan Vural**
+
+**GitHub:** `@nazifcan60`
+Parça ve dış cephe çizimlerinin hazırlanması, teknik analizlerin gerçekleştirilmesi ve montaj süreçlerinin yürütülmesinden sorumludur.
+
+---
+
+### **Ramazan Tunçtan**
+
+**GitHub:** `@Ramazan496`
+Makinenin genel tasarımı ve işleyiş mekanizmasının geliştirilmesinden sorumludur. Gerekli mekanik parçaların tasarımı ve uygulanabilirliği üzerine çalışmalar yürütmektedir.
+
+---
+
+### **Muhammed Şah Kırmızı**
+
+**GitHub:** `@muhammetsah6363-crypto`
+Sistemin arayüz (UI) tasarımından ve kullanıcı deneyiminin yapılandırılmasından sorumludur.
+
+---
+
+### **Yazdan Samari**
+
+**GitHub:** `@Phdgamer0`
+Backend geliştirme, algoritma tasarımı ve robotik kontrol kodlarının geliştirilmesinden sorumludur. Sistem mantığının ve karar mekanizmalarının oluşturulmasını yürütmektedir.
+
+---
+
+### **Vall**
+
+**GitHub:** `@gkxvall`
+Görüntü işleme (Image Processing) ve yapay zeka (AI) modüllerinin geliştirilmesinden sorumludur. Algılama, analiz ve hedef tespit süreçlerini tasarlamaktadır.
+
+---
+
+### **EmirBurhan Özdemir**
+
+**GitHub:** `@24060968`
+Makina tasarimi, dayanıklılığı ve işleyişinden sorumlu

@@ -65,12 +65,16 @@ public:
     double yawAngle; // Yaw angle of the system in degrees
     double pitchAngle; // Pitch angle of the system in degrees
     bool isShutDown; // System state (shut down or running)
-    System(bool shutDown = false) : isShutDown(shutDown) {};
+    System(bool shutDown = false) : isShutDown(shutDown) {
+        for (uint8_t i = 0; i<5; i++) HistoryFrames[i] = nullptr; // clean setup
+    };
     void shutdown(); // shut down the system
     void restart(); // restart the system
     friend std::ostream& operator<<(std::ostream& os, const System& system);
     ~System() = default;
 private:
+    std::unordered_map<uint8_t, Object> trackedObjects;
+    ImageFrame* HistoryFrames[5];
     void handleCameraSignal(sig signal); // handle camera-related signals
     void handleEngineSignal(sig signal); // handle engine-related signals
     void handleLaserSignal(sig signal); // handle laser-related signals

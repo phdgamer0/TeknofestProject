@@ -16,7 +16,6 @@ Kodlar aktif geliştirme sürecindedir ve **henüz final sürüm değildir**.
   - [test.py](#testpy)
   - [DataPrep](#dataprep)
 - [Önemli Notlar](#önemli-notlar)
-- [Geliştirme Durumu](#geliştirme-durumu)
 
 ---
 

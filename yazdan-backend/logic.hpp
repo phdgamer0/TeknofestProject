@@ -1,5 +1,6 @@
 #pragma once
 #include "physichs.hpp"
+extern constexpr uint8_t FRAME_HISTORY_COUNT;
 extern const double TIME_UNDER_FIRE;
 extern const double MAX_VELOCUTY_X;
 extern const double MAX_VELOCUTY_Y;

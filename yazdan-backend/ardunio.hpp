@@ -1,4 +1,5 @@
 #pragma once
+#include "constants.hpp"
 #include "physichs.hpp"
 #include "comms.hpp"
 #include "logic.hpp"
@@ -11,7 +12,7 @@ extern std::unordered_map<uint8_t, Object> trackedObjects; // map to keep track 
 typedef struct ImageFrame{
     vec centerPos; // position of the center of the camera frame in (x,y,z) coordinates
     double frame_width=1920.0F, frame_height=1080.0F; // dimensions of the camera frame in pixels
-    std::vector<obj> detectedObjects; // list of detected objects in the current frame
+    std::unordered_map<uint8_t, Object> detectedObjects; // list of detected objects in the current frame
     ImageFrame(vec centerPos = vec(0,0,0)) : centerPos(centerPos) {};
     friend std::ostream& operator<<(std::ostream& os, const ImageFrame& frame);
     ~ImageFrame() = default;
@@ -66,15 +67,16 @@ public:
     double pitchAngle; // Pitch angle of the system in degrees
     bool isShutDown; // System state (shut down or running)
     System(bool shutDown = false) : isShutDown(shutDown) {
-        for (uint8_t i = 0; i<5; i++) HistoryFrames[i] = nullptr; // clean setup
+        for (uint8_t i = 0; i < HISTORY_FRAME_COUNTS; i++) HistoryFrames[i] = nullptr; // clean setup
     };
     void shutdown(); // shut down the system
     void restart(); // restart the system
     friend std::ostream& operator<<(std::ostream& os, const System& system);
+    friend Brain;
     ~System() = default;
 private:
     std::unordered_map<uint8_t, Object> trackedObjects;
-    ImageFrame* HistoryFrames[5];
+    ImageFrame* HistoryFrames[HISTORY_FRAME_COUNTS];
     void handleCameraSignal(sig signal); // handle camera-related signals
     void handleEngineSignal(sig signal); // handle engine-related signals
     void handleLaserSignal(sig signal); // handle laser-related signals

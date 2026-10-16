@@ -1,6 +1,34 @@
 #pragma once
+#include "../include/physichs.hpp"
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <queue>
+#include <optional>
+#include <variant>
+
+template <typename T, size_t Capacity = 32>
+class RingBuffer {
+ private:
+   std::array<T, Capacity> buffer{};
+   size_t head = 0; // write index
+   size_t tail = 0; // read index
+   size_t count = 0;
+
+ public:
+   constexpr RingBuffer() = default;
+
+   bool push(const T& item);
+   bool pop(T& item);
+   void pop();
+   const T& front() const;
+   T& front();
+   bool empty() const;
+   bool full() const;
+   size_t size() const;
+   void clear();
+};
+
+using SignalValue = std::variant<std::monostate, vec, double, int, bool, std::string>;
 enum class SIGNALS : uint8_t {
    // CAMERA signals
    CAM_MOVE,
@@ -55,14 +83,6 @@ enum class SIGNALS : uint8_t {
    SYSTEM_RESUME,
    NO_SIG
 };
-enum class DataTypes : uint8_t {
-   NONE,
-   VEC_3D,
-   STRING,
-   INTEGER,
-   FLOAT,
-   BOOLEAN,
-};
 enum class Priority : uint8_t {
    CRITICAL,
    IMPORTANT,
@@ -70,25 +90,25 @@ enum class Priority : uint8_t {
    LOG,
 };
 typedef struct Signal {
+   SignalValue value;      // value of the signal
    uint64_t timestamp;     // for logging
-   void* data;             // optional data pointer for signal parameters
    SIGNALS signal;         // the literal signal
-   DataTypes dataType;     // type of the data being transmitted with the signal
    Priority priorityLevel; // priority level of the signal
-   constexpr Signal(SIGNALS signal = SIGNALS::NO_SIG, DataTypes dataType = DataTypes::NONE, Priority priorityLevel = Priority::NORMAL, void* data = nullptr) : signal(signal), dataType(dataType), priorityLevel(priorityLevel), data(data) {};
+   Signal(SIGNALS signal = SIGNALS::NO_SIG, SignalValue value = std::monostate{}, Priority priorityLevel = Priority::NORMAL, uint64_t timestamp = 0) : value(value), timestamp(timestamp), signal(signal), priorityLevel(priorityLevel) {};
    ~Signal() = default;
 } sig;
 class CommunicatorDevice {
  private:
-   std::queue<sig> criticalQueue;  // queue to hold critical signals that need immediate attention
-   std::queue<sig> importantQueue; // queue to hold important signals that need attention
-   std::queue<sig> normalQueue;    // queue to hold incoming signals
-   std::queue<sig> logQueue;       // queue to hold log signals for debugging and monitoring
+   static constexpr size_t QUEUE_CAPACITY = 32;
+   RingBuffer<sig, QUEUE_CAPACITY> criticalQueue;  // queue to hold critical signals that need immediate attention
+   RingBuffer<sig, QUEUE_CAPACITY> importantQueue; // queue to hold important signals that need attention
+   RingBuffer<sig, QUEUE_CAPACITY> normalQueue;    // queue to hold incoming signals
+   RingBuffer<sig, QUEUE_CAPACITY> logQueue;       // queue to hold log signals for debugging and monitoring
  public:
    void Transmit(CommunicatorDevice& receiver, const sig& signal); // transmit a signal to another device
    void Receive(const sig& signal);                                // receive a signal and add it to the queue
    bool HasSignals() const;                                        // check if there are any signals in the queue
    void ClearSignals();                                            // clear all signals from the queue
-   sig nextSignal() const;                                         // retrieve the next signal from the queue without removing it
-   sig popSignal();                                                // retrieve and remove the next signal from the queue
+   std::optional<sig> nextSignal() const;                          // retrieve the next signal from the queue without removing it
+   std::optional<sig> popSignal();                                 // retrieve and remove the next signal from the queue
 };

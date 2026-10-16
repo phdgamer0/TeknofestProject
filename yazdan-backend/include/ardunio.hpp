@@ -5,54 +5,53 @@
 #include "physichs.hpp"
 #include <cstdint>
 #include <unordered_map>
+
 typedef struct ImageFrame {
    vec centerPos;                                        // position of the center of the camera frame in (x,y,z) coordinates
    double frame_width = 1920.0F, frame_height = 1080.0F; // dimensions of the camera frame in pixels
-   uint64_t timestamp;                                   // the time where the frame was captured
+   uint64_t timestamp{0};                                // the time where the frame was captured
    std::unordered_map<uint8_t, Object> detectedObjects;  // list of detected objects in the current frame
-   ImageFrame(vec centerPos = vec(0, 0, 0)) : centerPos(centerPos) {};
+   ImageFrame(vec centerPos = vec(0, 0, 0), uint64_t timestamp = 0) : centerPos(centerPos), timestamp(timestamp) {
+      detectedObjects.reserve(16);
+   }
+   // Prevent expensive copying: frames must be passed by pointer/reference or updated in-place
+   ImageFrame(const ImageFrame&) = delete;
+   ImageFrame& operator=(const ImageFrame&) = delete;
+   ImageFrame(ImageFrame&&) = default;
+   ImageFrame& operator=(ImageFrame&&) = default;
    friend std::ostream& operator<<(std::ostream& os, const ImageFrame& frame);
    ~ImageFrame() = default;
 } img;
-class AI {
- public:
-   CommunicatorDevice AI_CHANNEL;
-   void operator<<(const img& frame); // process an image frame and determine the appropriate response (called every frame for each image frame)
- private:
-   void processImage(const img& frame); // process an image frame and determine the appropriate response (called every frame for each image frame)
-   ~AI() = default;
-};
+
 class Camera {
  public:
-   CommunicatorDevice CAMERA_CHANNEL;
-   vec CamCenterPos;                 // Camera position
-   double frame_width, frame_height; // dimensions of the camera frame in pixels
-   Camera(vec pos = vec(0, 0, 0), double width = 1920.0F, double height = 1080.0F) : CamCenterPos(pos), frame_width(width), frame_height(height) {};
+   vec CamCenterPos;                            // Camera position
+   double frame_width, frame_height;            // dimensions of the camera frame in pixels
    [[maybe_unused]] void calibrate(vec newPos); // calibrate the camera to a new position (smooth transition)
    void reset();                                // reset camera to default position and parameters
    void updateCamera(float deltaTime);          // update camera position and parameters based on velocity and acceleration (called every frame)
-   img captureFrame();
+   constexpr Camera(vec pos = vec(0, 0, 0), double width = 1920.0F, double height = 1080.0F) : CamCenterPos(pos), frame_width(width), frame_height(height) {};
    friend std::ostream& operator<<(std::ostream& os, const Camera& cam);
    ~Camera() = default;
 };
+
 class Laser {
  public:
-   CommunicatorDevice LASER_CHANNEL;
    bool isOn; // Laser state (on/off)
    vec laserPos;
-   Laser(bool state = false) : isOn(state) {};
+   constexpr Laser(bool state = false) : isOn(state) {};
    void turnOn();  // turn the laser on
    void turnOff(); // turn the laser off
    friend std::ostream& operator<<(std::ostream& os, const Laser& laser);
    ~Laser() = default;
 };
+
 class Engine {
  public:
-   CommunicatorDevice ENGINE_CHANNEL;
    vec velocity;     // Engine velocity
    vec acceleration; // Engine acceleration
    bool isActive;    // Engine state (active/inactive)
-   Engine(vec vel = vec(0, 0, 0), vec acc = vec(0, 0, 0), bool active = false) : velocity(vel), acceleration(acc), isActive(active) {};
+   constexpr Engine(vec vel = vec(0, 0, 0), vec acc = vec(0, 0, 0), bool active = false) : velocity(vel), acceleration(acc), isActive(active) {};
    void move(vec vel, vec acc = vec(0, 0, 0));      // move the engine with specified velocity and optional acceleration
    void stop();                                     // stop the engine (set velocity and acceleration to zero)
    void calibrate(vec vel, vec acc = vec(0, 0, 0)); // calibrate the engine to a new velocity and acceleration (smooth transition)
@@ -61,25 +60,41 @@ class Engine {
    friend std::ostream& operator<<(std::ostream& os, const Engine& engine);
    ~Engine() = default;
 };
+
 class System {
  public:
-   void executeSignal(sig signal); // execute a received signal and perform the corresponding action
-   double yawAngle;                // Yaw angle of the system in degrees
-   double pitchAngle;              // Pitch angle of the system in degrees
-   bool isShutDown;                // System state (shut down or running)
-   System(bool shutDown = false) : isShutDown(shutDown) {
-      for (uint8_t i = 0; i < HISTORY_FRAME_COUNTS; i++)
-         HistoryFrames[i] = nullptr; // clean setup
-   };
-   void shutdown(); // shut down the system
-   void restart();  // restart the system
-   friend std::ostream& operator<<(std::ostream& os, const System& system);
-   friend Brain;
+   Camera& camera;                  // Camera instance
+   Engine& engineLeftYaw;           // Left yaw Engine instance
+   Engine& engineRightYaw;          // Right yaw Engine instance
+   Engine& enginePitch;             // Pitch Engine instance
+   Laser& laser;                    // Laser instance
+   Brain& brain;                    // Brain instance owned by System
+   CommunicatorDevice COMM_CHANNEL; // System communication channel
+   double yawAngle{0.0};            // Yaw angle of the system in degrees
+   double pitchAngle{0.0};          // Pitch angle of the system in degrees
+   bool isShutDown{false};          // System state (shut down or running)
+   void executeSignal(sig signal);  // execute a received signal and perform the corresponding action
+   void shutdown();                 // shut down the system
+   void startup();                  // startup the system
+   void reset();                    // reset the system
+   System(Camera& cam, Engine& engineLeftYaw, Engine& engineRightYaw, Engine& enginePitch, Laser& laser, Brain& brain);
    ~System() = default;
+   // Circular ring buffer frame management: in-place overwrite, zero heap allocation
+   ImageFrame* pushFrame(vec centerPos = vec(0, 0, 0), uint64_t timestamp = 0);
+   // Accessors for state
+   std::unordered_map<uint8_t, Object>& getTrackedObjects();
+   const std::unordered_map<uint8_t, Object>& getTrackedObjects() const;
+   ImageFrame** getHistoryFrames();
+   ImageFrame* const* getHistoryFrames() const;
+   // Update kinematics using the internal Brain
+   void updateKinematics();
+   friend std::ostream& operator<<(std::ostream& os, const System& system);
 
  private:
    std::unordered_map<uint8_t, Object> trackedObjects;
-   ImageFrame* HistoryFrames[HISTORY_FRAME_COUNTS];
+   ImageFrame framePool[HISTORY_FRAME_COUNTS];
+   ImageFrame* HistoryFrames[HISTORY_FRAME_COUNTS]{};
+   size_t frameCount{0};
    void handleCameraSignal(sig signal); // handle camera-related signals
    void handleEngineSignal(sig signal); // handle engine-related signals
    void handleLaserSignal(sig signal);  // handle laser-related signals

@@ -111,3 +111,218 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
       << ", Time Under Fire: " << obj.timeUnderFire << " seconds";
    return os;
 }
+
+// --- FlatObjectMap Implementation ---
+template <size_t MaxCapacity>
+void FlatObjectMap<MaxCapacity>::Iterator::advance() {
+   while (ptr != end && !ptr->active)
+      ++ptr;
+}
+
+template <size_t MaxCapacity>
+FlatObjectMap<MaxCapacity>::Iterator::Iterator(Entry* p, Entry* e) : ptr(p), end(e) {
+   advance();
+}
+
+template <size_t MaxCapacity>
+std::pair<uint8_t, Object>& FlatObjectMap<MaxCapacity>::Iterator::operator*() const {
+   return ptr->kv;
+}
+
+template <size_t MaxCapacity>
+std::pair<uint8_t, Object>* FlatObjectMap<MaxCapacity>::Iterator::operator->() const {
+   return &ptr->kv;
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::Iterator& FlatObjectMap<MaxCapacity>::Iterator::operator++() {
+   if (ptr != end) {
+      ++ptr;
+      advance();
+   }
+   return *this;
+}
+
+template <size_t MaxCapacity>
+bool FlatObjectMap<MaxCapacity>::Iterator::operator!=(const Iterator& other) const {
+   return ptr != other.ptr;
+}
+
+template <size_t MaxCapacity>
+bool FlatObjectMap<MaxCapacity>::Iterator::operator==(const Iterator& other) const {
+   return ptr == other.ptr;
+}
+
+template <size_t MaxCapacity>
+void FlatObjectMap<MaxCapacity>::ConstIterator::advance() {
+   while (ptr != end && !ptr->active)
+      ++ptr;
+}
+
+template <size_t MaxCapacity>
+FlatObjectMap<MaxCapacity>::ConstIterator::ConstIterator(const Entry* p, const Entry* e) : ptr(p), end(e) {
+   advance();
+}
+
+template <size_t MaxCapacity>
+const std::pair<uint8_t, Object>& FlatObjectMap<MaxCapacity>::ConstIterator::operator*() const {
+   return ptr->kv;
+}
+
+template <size_t MaxCapacity>
+const std::pair<uint8_t, Object>* FlatObjectMap<MaxCapacity>::ConstIterator::operator->() const {
+   return &ptr->kv;
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::ConstIterator& FlatObjectMap<MaxCapacity>::ConstIterator::operator++() {
+   if (ptr != end) {
+      ++ptr;
+      advance();
+   }
+   return *this;
+}
+
+template <size_t MaxCapacity>
+bool FlatObjectMap<MaxCapacity>::ConstIterator::operator!=(const ConstIterator& other) const {
+   return ptr != other.ptr;
+}
+
+template <size_t MaxCapacity>
+bool FlatObjectMap<MaxCapacity>::ConstIterator::operator==(const ConstIterator& other) const {
+   return ptr == other.ptr;
+}
+
+template <size_t MaxCapacity>
+void FlatObjectMap<MaxCapacity>::insert_or_assign(uint8_t id, const Object& object) {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id) {
+         entries[i].kv.second = object;
+         return;
+      }
+   }
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (!entries[i].active) {
+         entries[i].kv.first = id;
+         entries[i].kv.second = object;
+         entries[i].active = true;
+         activeCount++;
+         return;
+      }
+   }
+   throw std::out_of_range("FlatObjectMap capacity exceeded");
+}
+
+template <size_t MaxCapacity>
+Object& FlatObjectMap<MaxCapacity>::operator[](uint8_t id) {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id)
+         return entries[i].kv.second;
+   }
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (!entries[i].active) {
+         entries[i].kv.first = id;
+         entries[i].kv.second = Object();
+         entries[i].active = true;
+         activeCount++;
+         return entries[i].kv.second;
+      }
+   }
+   throw std::out_of_range("FlatObjectMap capacity exceeded");
+}
+
+template <size_t MaxCapacity>
+size_t FlatObjectMap<MaxCapacity>::count(uint8_t id) const {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id)
+         return 1;
+   }
+   return 0;
+}
+
+template <size_t MaxCapacity>
+Object& FlatObjectMap<MaxCapacity>::at(uint8_t id) {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id)
+         return entries[i].kv.second;
+   }
+   throw std::out_of_range("FlatObjectMap: id not found");
+}
+
+template <size_t MaxCapacity>
+const Object& FlatObjectMap<MaxCapacity>::at(uint8_t id) const {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id)
+         return entries[i].kv.second;
+   }
+   throw std::out_of_range("FlatObjectMap: id not found");
+}
+
+template <size_t MaxCapacity>
+void FlatObjectMap<MaxCapacity>::erase(uint8_t id) {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      if (entries[i].active && entries[i].kv.first == id) {
+         entries[i].active = false;
+         activeCount--;
+         return;
+      }
+   }
+}
+
+template <size_t MaxCapacity>
+void FlatObjectMap<MaxCapacity>::clear() {
+   for (size_t i = 0; i < MaxCapacity; ++i) {
+      entries[i].active = false;
+   }
+   activeCount = 0;
+}
+
+template <size_t MaxCapacity>
+bool FlatObjectMap<MaxCapacity>::empty() const {
+   return activeCount == 0;
+}
+
+template <size_t MaxCapacity>
+size_t FlatObjectMap<MaxCapacity>::size() const {
+   return activeCount;
+}
+
+template <size_t MaxCapacity>
+size_t FlatObjectMap<MaxCapacity>::capacity() const {
+   return MaxCapacity;
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::Iterator FlatObjectMap<MaxCapacity>::begin() {
+   return Iterator(entries.data(), entries.data() + MaxCapacity);
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::Iterator FlatObjectMap<MaxCapacity>::end() {
+   return Iterator(entries.data() + MaxCapacity, entries.data() + MaxCapacity);
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::ConstIterator FlatObjectMap<MaxCapacity>::begin() const {
+   return ConstIterator(entries.data(), entries.data() + MaxCapacity);
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::ConstIterator FlatObjectMap<MaxCapacity>::end() const {
+   return ConstIterator(entries.data() + MaxCapacity, entries.data() + MaxCapacity);
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::ConstIterator FlatObjectMap<MaxCapacity>::cbegin() const {
+   return begin();
+}
+
+template <size_t MaxCapacity>
+typename FlatObjectMap<MaxCapacity>::ConstIterator FlatObjectMap<MaxCapacity>::cend() const {
+   return end();
+}
+
+// Explicit template instantiations
+template class FlatObjectMap<16>;
+template class FlatObjectMap<32>;
+template class FlatObjectMap<64>;

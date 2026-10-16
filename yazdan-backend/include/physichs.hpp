@@ -1,6 +1,9 @@
 #pragma once
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <utility>
 
 /*
         ================================================
@@ -39,9 +42,70 @@ typedef struct Vector3D {
 typedef struct Object {
    vec pos, vel, acc; // position, velocity, acceleration
    double timeUnderFire = 0.0;
-   u_int8_t ID;
-   bool isFriendly, isAlive, isUrgent;
-   Object(vec p, vec v = vec(0, 0, 0), vec a = vec(0, 0, 0), bool isFriendly = false) : pos(p), vel(v), acc(a), isFriendly(isFriendly), isAlive(true) {};
+   uint8_t ID{0};
+   bool isFriendly{false}, isAlive{true}, isUrgent{false};
+   Object(vec p = vec(0, 0, 0), vec v = vec(0, 0, 0), vec a = vec(0, 0, 0), bool isFriendly = false) : pos(p), vel(v), acc(a), isFriendly(isFriendly), isAlive(true), isUrgent(false) {};
    friend std::ostream& operator<<(std::ostream& os, const Object& obj);
    ~Object() = default;
 } obj;
+
+// Fast, cache-local contiguous map for small ID key spaces (uint8_t ID, max 32 objects)
+// Eliminates dynamic heap node allocations and CPU cache misses
+template <size_t MaxCapacity = 32>
+class FlatObjectMap {
+ public:
+   struct Entry {
+      std::pair<uint8_t, Object> kv{0, Object()};
+      bool active{false};
+   };
+
+   struct Iterator {
+      Entry* ptr{nullptr};
+      Entry* end{nullptr};
+      void advance();
+      Iterator(Entry* p, Entry* e);
+      std::pair<uint8_t, Object>& operator*() const;
+      std::pair<uint8_t, Object>* operator->() const;
+      Iterator& operator++();
+      bool operator!=(const Iterator& other) const;
+      bool operator==(const Iterator& other) const;
+   };
+
+   struct ConstIterator {
+      const Entry* ptr{nullptr};
+      const Entry* end{nullptr};
+      void advance();
+      ConstIterator(const Entry* p, const Entry* e);
+      const std::pair<uint8_t, Object>& operator*() const;
+      const std::pair<uint8_t, Object>* operator->() const;
+      ConstIterator& operator++();
+      bool operator!=(const ConstIterator& other) const;
+      bool operator==(const ConstIterator& other) const;
+   };
+
+ private:
+   std::array<Entry, MaxCapacity> entries{};
+   size_t activeCount{0};
+
+ public:
+   FlatObjectMap() = default;
+   ~FlatObjectMap() = default;
+
+   void insert_or_assign(uint8_t id, const Object& object);
+   Object& operator[](uint8_t id);
+   size_t count(uint8_t id) const;
+   Object& at(uint8_t id);
+   const Object& at(uint8_t id) const;
+   void erase(uint8_t id);
+   void clear();
+   bool empty() const;
+   size_t size() const;
+   size_t capacity() const;
+
+   Iterator begin();
+   Iterator end();
+   ConstIterator begin() const;
+   ConstIterator end() const;
+   ConstIterator cbegin() const;
+   ConstIterator cend() const;
+};

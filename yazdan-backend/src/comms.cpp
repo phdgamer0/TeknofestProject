@@ -1,5 +1,73 @@
 #include "../include/comms.hpp"
-#include <stdexcept>
+#include <optional>
+
+template <typename T, size_t Capacity>
+bool RingBuffer<T, Capacity>::push(const T& item) {
+   if (count == Capacity) {
+      // Overwrite oldest item to prevent dropping new signals
+      tail = (tail + 1) % Capacity;
+      count--;
+   }
+   buffer[head] = item;
+   head = (head + 1) % Capacity;
+   count++;
+   return true;
+}
+
+template <typename T, size_t Capacity>
+bool RingBuffer<T, Capacity>::pop(T& item) {
+   if (count == 0)
+      return false;
+   item = buffer[tail];
+   tail = (tail + 1) % Capacity;
+   count--;
+   return true;
+}
+
+template <typename T, size_t Capacity>
+void RingBuffer<T, Capacity>::pop() {
+   if (count > 0) {
+      tail = (tail + 1) % Capacity;
+      count--;
+   }
+}
+
+template <typename T, size_t Capacity>
+const T& RingBuffer<T, Capacity>::front() const {
+   return buffer[tail];
+}
+
+template <typename T, size_t Capacity>
+T& RingBuffer<T, Capacity>::front() {
+   return buffer[tail];
+}
+
+template <typename T, size_t Capacity>
+bool RingBuffer<T, Capacity>::empty() const {
+   return count == 0;
+}
+
+template <typename T, size_t Capacity>
+bool RingBuffer<T, Capacity>::full() const {
+   return count == Capacity;
+}
+
+template <typename T, size_t Capacity>
+size_t RingBuffer<T, Capacity>::size() const {
+   return count;
+}
+
+template <typename T, size_t Capacity>
+void RingBuffer<T, Capacity>::clear() {
+   head = tail = count = 0;
+}
+
+// Explicit template instantiations
+template class RingBuffer<sig, 4>;
+template class RingBuffer<sig, 16>;
+template class RingBuffer<sig, 32>;
+template class RingBuffer<sig, 64>;
+
 void CommunicatorDevice::Transmit(CommunicatorDevice& receiver, const sig& signal) { // transmit a signal to another device
    receiver.Receive(signal);
 }
@@ -25,20 +93,12 @@ bool CommunicatorDevice::HasSignals() const { // check if there are any signals 
    return !criticalQueue.empty() || !importantQueue.empty() || !normalQueue.empty() || !logQueue.empty();
 }
 void CommunicatorDevice::ClearSignals() { // clear all signals from the queue
-   while (!criticalQueue.empty()) {
-      criticalQueue.pop();
-   }
-   while (!importantQueue.empty()) {
-      importantQueue.pop();
-   }
-   while (!normalQueue.empty()) {
-      normalQueue.pop();
-   }
-   while (!logQueue.empty()) {
-      logQueue.pop();
-   }
+   criticalQueue.clear();
+   importantQueue.clear();
+   normalQueue.clear();
+   logQueue.clear();
 }
-sig CommunicatorDevice::nextSignal() const { // retrieve the next signal from the queue without removing it
+std::optional<sig> CommunicatorDevice::nextSignal() const { // retrieve the next signal from the queue without removing it
    if (!criticalQueue.empty()) {
       return criticalQueue.front();
    }
@@ -52,10 +112,10 @@ sig CommunicatorDevice::nextSignal() const { // retrieve the next signal from th
       return logQueue.front();
    }
    else {
-      throw std::runtime_error("No signals in queue");
+      return std::nullopt;
    }
 }
-sig CommunicatorDevice::popSignal() { // retrieve and remove the next signal from the queue
+std::optional<sig> CommunicatorDevice::popSignal() { // retrieve and remove the next signal from the queue
    if (!criticalQueue.empty()) {
       sig signal = criticalQueue.front();
       criticalQueue.pop();
@@ -77,6 +137,6 @@ sig CommunicatorDevice::popSignal() { // retrieve and remove the next signal fro
       return signal;
    }
    else {
-      throw std::runtime_error("No signals in queue");
+      return std::nullopt;
    }
 }

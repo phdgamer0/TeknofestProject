@@ -8,13 +8,10 @@
 #include <stdexcept>
 #include <vector>
 
-extern const double TIME_UNDER_FIRE;
-extern const double MAX_VELOCUTY_X;
-extern const double MAX_VELOCUTY_Y;
-extern const vec CAMERA_LASER_OFFSET;
-extern struct ImageFrame* HistoryFrames[];
-
-void Brain::SmoothKinematics(std::unordered_map<uint8_t, obj>& objects) const {
+void Brain::SmoothKinematics(std::unordered_map<uint8_t, obj>& objects, ImageFrame** HistoryFrames) const {
+   if (HistoryFrames == nullptr) {
+      return;
+   }
    for (auto& [id, target] : objects) {
       // Collect past positions from HistoryFrames for this object
       std::vector<vec> pastPositions;
@@ -45,11 +42,11 @@ void Brain::SmoothKinematics(std::unordered_map<uint8_t, obj>& objects) const {
    }
 }
 
-void Brain::CalculateVelocity(ImageFrame** HistoryFrames) const {
+void Brain::CalculateVelocity(ImageFrame** HistoryFrames, std::unordered_map<uint8_t, obj>& objects) const {
    if (HistoryFrames == nullptr) {
       return;
    }
-   for (auto& [k, v] : trackedObjects) {
+   for (auto& [k, v] : objects) {
       vec new_vel{0.0, 0.0, 0.0};
       double counted_intervals = 0.0;
       int prevIndex = -1;
@@ -76,7 +73,7 @@ void Brain::CalculateVelocity(ImageFrame** HistoryFrames) const {
    }
 }
 
-void Brain::CalculateAcceleration(ImageFrame** HistoryFrames) const {
+void Brain::CalculateAcceleration(ImageFrame** HistoryFrames, std::unordered_map<uint8_t, obj>& objects) const {
    if (HistoryFrames == nullptr) {
       return;
    }
@@ -95,7 +92,7 @@ void Brain::CalculateAcceleration(ImageFrame** HistoryFrames) const {
       dt = totalTime / static_cast<double>(HISTORY_FRAME_COUNTS - 1);
       deltaTimeSquared = (dt > 1e-6) ? (dt * dt) : 1.0;
    }
-   for (auto& [k, v] : trackedObjects) {
+   for (auto& [k, v] : objects) {
       // Check if object is present across all history frames for Savitzky-Golay
       bool inAllFrames = allFramesValid;
       if (allFramesValid) {
@@ -152,6 +149,18 @@ void Brain::CalculateAcceleration(ImageFrame** HistoryFrames) const {
          }
       }
    }
+}
+
+void Brain::CalculateVelocity(std::unordered_map<uint8_t, obj>& objects, ImageFrame** HistoryFrames) const {
+   CalculateVelocity(HistoryFrames, objects);
+}
+
+void Brain::CalculateAcceleration(std::unordered_map<uint8_t, obj>& objects, ImageFrame** HistoryFrames) const {
+   CalculateAcceleration(HistoryFrames, objects);
+}
+
+void Brain::SmoothKinematics(ImageFrame** HistoryFrames, std::unordered_map<uint8_t, obj>& objects) const {
+   SmoothKinematics(objects, HistoryFrames);
 }
 
 vec Brain::PredictPos(const obj& target, double timeFuture) const {

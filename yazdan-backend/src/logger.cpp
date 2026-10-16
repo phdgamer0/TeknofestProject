@@ -3,7 +3,10 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
-inline std::string signalToString(sig signal) {
+#include <type_traits>
+#include <variant>
+
+std::string signalToString(const sig& signal) {
    switch (signal.signal) {
    case SIGNALS::CAM_MOVE:
       return "CAM_MOVE";
@@ -97,7 +100,8 @@ inline std::string signalToString(sig signal) {
       return "UNKNOWN_SIGNAL";
    }
 }
-inline std::string priorityToString(Priority priority) {
+
+std::string priorityToString(Priority priority) {
    switch (priority) {
    case Priority::CRITICAL:
       return "CRITICAL";
@@ -111,17 +115,20 @@ inline std::string priorityToString(Priority priority) {
       return "UNKNOWN_PRIORITY";
    }
 }
+
 Logger::Logger(const std::string& filename) {
    logFile.open(filename, std::ios::out | std::ios::app); // open the log file for appending
    if (!logFile.is_open()) {
       throw std::runtime_error("Failed to open log file: " + filename);
    }
 }
+
 Logger::~Logger() {
    if (logFile.is_open()) {
       logFile.close(); // close the log file when the logger is destroyed
    }
 }
+
 void Logger::log(const std::string& message) {
    if (logFile.is_open()) {
       // Get the current time for the timestamp
@@ -132,45 +139,29 @@ void Logger::log(const std::string& message) {
       logFile << std::put_time(localTime, "%Y-%m-%d %H:%M:%S") << " - " << message << std::endl;
    }
 }
+
 void Logger::logSignal(const sig& signal) {
    if (logFile.is_open()) {
-      // Log the signal type and data (if any)
-      logFile << "Signal: " << static_cast<int>(signal.signal) << ", Data Type: " << static_cast<int>(signal.dataType);
-      if (signal.data != nullptr) {
-         switch (signal.dataType) {
-         case DataTypes::NONE: {
-            break;
+      logFile << "Signal: " << signalToString(signal) << " [" << priorityToString(signal.priorityLevel) << "]";
+      std::visit([this](const auto& val) {
+         using T = std::decay_t<decltype(val)>;
+         if constexpr (std::is_same_v<T, std::monostate>) {
+            // No payload
          }
-         case DataTypes::VEC_3D: {
-            vec* dataVec = static_cast<vec*>(signal.data);
-            logFile << ", Data: (" << dataVec->x << ", " << dataVec->y << ", " << dataVec->z << ")";
-            break;
+         else if constexpr (std::is_same_v<T, vec>) {
+            logFile << ", Data: (" << val.x << ", " << val.y << ", " << val.z << ")";
          }
-         case DataTypes::STRING: {
-            std::string* dataStr = static_cast<std::string*>(signal.data);
-            logFile << ", Data: " << *dataStr;
-            break;
+         else if constexpr (std::is_same_v<T, std::string>) {
+            logFile << ", Data: " << val;
          }
-         case DataTypes::INTEGER: {
-            int* dataInt = static_cast<int*>(signal.data);
-            logFile << ", Data: " << *dataInt;
-            break;
+         else if constexpr (std::is_same_v<T, bool>) {
+            logFile << ", Data: " << (val ? "true" : "false");
          }
-         case DataTypes::FLOAT: {
-            float* dataFloat = static_cast<float*>(signal.data);
-            logFile << ", Data: " << *dataFloat;
-            break;
+         else {
+            logFile << ", Data: " << val;
          }
-         case DataTypes::BOOLEAN: {
-            bool* dataBool = static_cast<bool*>(signal.data);
-            logFile << ", Data: " << (*dataBool ? "true" : "false");
-            break;
-         }
-         default: {
-            logFile << ", Data: [Unknown Type]";
-         }
-         }
-         logFile << std::endl;
-      }
+      },
+                 signal.value);
+      logFile << std::endl;
    }
 }

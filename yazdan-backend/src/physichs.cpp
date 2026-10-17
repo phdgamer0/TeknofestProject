@@ -78,11 +78,30 @@ Vector3D& Vector3D::operator/=(double scalar) {
 Vector3D Vector3D::cross(const Vector3D& other) const {
    return Vector3D(y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x);
 }
+Vector3D& Vector3D::CylindricalToCartesian(const Vector3D& other) {
+   double cx = other.x * std::cos(other.y);
+   double cy = other.x * std::sin(other.y);
+   x = cx;
+   y = cy;
+   z = other.z;
+   return *this;
+}
+Vector3D& Vector3D::CartesianToCylindrical(const Vector3D& other) {
+   double radius = std::sqrt(other.x * other.x + other.y * other.y);
+   double angle = std::atan2(other.y, other.x);
+   x = radius;
+   y = angle;
+   z = other.z;
+   return *this;
+}
 double Vector3D::magnitude() const {
    return std::sqrt(x * x + y * y + z * z);
 }
 double Vector3D::distanceTo(const Vector3D& other) const {
-   return (*this - other).magnitude();
+   double dx = x - other.x;
+   double dy = y - other.y;
+   double dz = z - other.z;
+   return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 double Vector3D::angleTo(const Vector3D& other) const {
    double dot = (*this) * other;
@@ -96,10 +115,13 @@ double Vector3D::angleTo(const Vector3D& other) const {
    return toDegrees(std::acos(cosAngle));
 }
 double Vector3D::YawTo(const Vector3D& other) const {
-   return toDegrees(std::atan2(other[1] - this->y, other[0] - this->x));
+   return toDegrees(std::atan2(other.y - this->y, other.x - this->x));
 }
 double Vector3D::PitchTo(const Vector3D& other) const {
-   return toDegrees(std::atan2(other[2] - this->z, std::hypot(other[0] - this->x, other[1] - this->y)));
+   double dx = other.x - this->x;
+   double dy = other.y - this->y;
+   double dz = other.z - this->z;
+   return toDegrees(std::atan2(dz, std::sqrt(dx * dx + dy * dy)));
 }
 std::ostream& operator<<(std::ostream& os, const Vector3D& vec) {
    os << "(" << vec.x << ", " << vec.y << ", " << vec.z << ")";

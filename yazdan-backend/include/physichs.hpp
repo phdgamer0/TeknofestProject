@@ -20,22 +20,24 @@ typedef struct Vector3D {
    constexpr Vector3D(double x = 0, double y = 0, double z = 0) : x(x), y(y), z(z) {};
    double operator[](size_t i) const;
    double operator[](size_t i);
-   double operator*(const Vector3D& other) const;   // dot product
-   double operator*=(const Vector3D& other);        // dot product assignment
-   Vector3D operator*(double scalar) const;         // scalar multiplication
-   Vector3D operator+(const Vector3D& other) const; // vector addition
-   Vector3D operator-(const Vector3D& other) const; // vector subtraction
-   Vector3D operator/(double scalar) const;         // scalar division
-   Vector3D& operator+=(const Vector3D& other);     // vector addition assignment
-   Vector3D& operator-=(const Vector3D& other);     // vector subtraction assignment
-   Vector3D& operator*=(double scalar);             // scalar multiplication assignment
-   Vector3D& operator/=(double scalar);             // scalar division assignment
-   Vector3D cross(const Vector3D& other) const;     // cross product
-   double magnitude() const;                        // magnitude of the vector
-   double distanceTo(const Vector3D& other) const;  // distance to another vector
-   double angleTo(const Vector3D& other) const;     // angle to another vector in radians
-   double YawTo(const Vector3D& other) const;       // yaw angle to another vector in degrees
-   double PitchTo(const Vector3D& other) const;     // pitch angle to another vector in degrees
+   double operator*(const Vector3D& other) const;           // dot product
+   double operator*=(const Vector3D& other);                // dot product assignment
+   Vector3D operator*(double scalar) const;                 // scalar multiplication
+   Vector3D operator+(const Vector3D& other) const;         // vector addition
+   Vector3D operator-(const Vector3D& other) const;         // vector subtraction
+   Vector3D operator/(double scalar) const;                 // scalar division
+   Vector3D& operator+=(const Vector3D& other);             // vector addition assignment
+   Vector3D& operator-=(const Vector3D& other);             // vector subtraction assignment
+   Vector3D& operator*=(double scalar);                     // scalar multiplication assignment
+   Vector3D& operator/=(double scalar);                     // scalar division assignment
+   Vector3D cross(const Vector3D& other) const;             // cross product
+   Vector3D& CylindricalToCartesian(const Vector3D& other); // convert cylindrical to cartesian
+   Vector3D& CartesianToCylindrical(const Vector3D& other); // convert cartesian to cylindrical
+   double magnitude() const;                                // magnitude of the vector
+   double distanceTo(const Vector3D& other) const;          // distance to another vector
+   double angleTo(const Vector3D& other) const;             // angle to another vector in radians
+   double YawTo(const Vector3D& other) const;               // yaw angle to another vector in degrees
+   double PitchTo(const Vector3D& other) const;             // pitch angle to another vector in degrees
    friend std::ostream& operator<<(std::ostream& os, const Vector3D& vec);
    ~Vector3D() = default;
 } vec;
@@ -44,7 +46,8 @@ typedef struct Object {
    double timeUnderFire = 0.0;
    uint8_t ID{0};
    bool isFriendly{false}, isAlive{true}, isUrgent{false};
-   Object(vec p = vec(0, 0, 0), vec v = vec(0, 0, 0), vec a = vec(0, 0, 0), bool isFriendly = false) : pos(p), vel(v), acc(a), isFriendly(isFriendly), isAlive(true), isUrgent(false) {};
+   uint8_t staleCount{0};
+   Object(vec p = vec(0, 0, 0), vec v = vec(0, 0, 0), vec a = vec(0, 0, 0), bool isFriendly = false) : pos(p), vel(v), acc(a), isFriendly(isFriendly), isAlive(true), isUrgent(false), staleCount(0) {};
    friend std::ostream& operator<<(std::ostream& os, const Object& obj);
    ~Object() = default;
 } obj;

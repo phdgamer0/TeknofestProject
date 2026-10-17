@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+using Target = obj*;
 struct ImageFrame;
 
 class Brain {
@@ -27,6 +28,6 @@ class Brain {
 
    // Decision Making
    double EvaluateThreatLevel(const obj& target, const vec& cameraPos) const;                                                    // returns the highest threat level for the greedy algorithm
-   obj& pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos);                                         // returns the pointer to the best target
+   Target pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos);                                       // returns the pointer to the best target
    bool isShotSafe(const vec& targetPos, double laserRadius, const std::unordered_map<uint8_t, obj>& allObjects, vec cameraPos); // checks if it is safe to shot the tracked target
 };

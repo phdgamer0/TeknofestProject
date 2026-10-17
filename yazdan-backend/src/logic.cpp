@@ -5,32 +5,27 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <stdexcept>
-#include <vector>
 
 void Brain::SmoothKinematics(std::unordered_map<uint8_t, obj>& objects, ImageFrame** HistoryFrames) const {
    if (HistoryFrames == nullptr) {
       return;
    }
    for (auto& [id, target] : objects) {
-      // Collect past positions from HistoryFrames for this object
-      std::vector<vec> pastPositions;
+      std::array<vec, HISTORY_FRAME_COUNTS> pastPositions;
+      size_t count = 0;
       for (uint8_t i = 0; i < HISTORY_FRAME_COUNTS; ++i) {
          if (HistoryFrames[i] != nullptr && HistoryFrames[i]->detectedObjects.count(id)) {
-            pastPositions.push_back(HistoryFrames[i]->detectedObjects.at(id).pos);
+            pastPositions[count++] = HistoryFrames[i]->detectedObjects.at(id).pos;
          }
       }
-      if (pastPositions.size() == HISTORY_FRAME_COUNTS) {
-         // Savitzky-Golay end-point smoothing filter for 5 points (degree 2 polynomial):
-         // Coefficients: [-3, -2, 3, 12, 25] / 35
+      if (count == HISTORY_FRAME_COUNTS) {
          vec smoothedPos = (pastPositions[0] * -3.0 + pastPositions[1] * -2.0 + pastPositions[2] * 3.0 + pastPositions[3] * 12.0 + pastPositions[4] * 25.0) / 35.0;
          target.pos = smoothedPos;
       }
-      else if (!pastPositions.empty()) {
-         // Weighted moving average giving more weight to recent detections
+      else if (count > 0) {
          vec weightedSum(0.0, 0.0, 0.0);
          double totalWeight = 0.0;
-         for (size_t i = 0; i < pastPositions.size(); ++i) {
+         for (size_t i = 0; i < count; ++i) {
             double weight = static_cast<double>(i + 1);
             weightedSum += pastPositions[i] * weight;
             totalWeight += weight;
@@ -116,25 +111,27 @@ void Brain::CalculateAcceleration(ImageFrame** HistoryFrames, std::unordered_map
       }
       else {
          // Fallback: estimate acceleration from available consecutive velocity changes
-         std::vector<std::pair<vec, double>> positionsWithTime;
+         std::array<std::pair<vec, double>, HISTORY_FRAME_COUNTS> positionsWithTime;
+         size_t posCount = 0;
          for (uint8_t i = 0; i < HISTORY_FRAME_COUNTS; ++i) {
             if (HistoryFrames[i] != nullptr && HistoryFrames[i]->detectedObjects.count(k)) {
-               positionsWithTime.emplace_back(HistoryFrames[i]->detectedObjects.at(k).pos, static_cast<double>(HistoryFrames[i]->timestamp));
+               positionsWithTime[posCount++] = {HistoryFrames[i]->detectedObjects.at(k).pos, static_cast<double>(HistoryFrames[i]->timestamp)};
             }
          }
-         if (positionsWithTime.size() >= 3) {
-            std::vector<std::pair<vec, double>> velocities;
-            for (size_t i = 0; i < positionsWithTime.size() - 1; ++i) {
+         if (posCount >= 3) {
+            std::array<std::pair<vec, double>, HISTORY_FRAME_COUNTS> velocities;
+            size_t velCount = 0;
+            for (size_t i = 0; i < posCount - 1; ++i) {
                vec dp = positionsWithTime[i + 1].first - positionsWithTime[i].first;
                double dtInterval = positionsWithTime[i + 1].second - positionsWithTime[i].second;
                if (dtInterval <= 1e-6) {
                   dtInterval = 1.0;
                }
-               velocities.emplace_back(dp / dtInterval, (positionsWithTime[i + 1].second + positionsWithTime[i].second) * 0.5);
+               velocities[velCount++] = {dp / dtInterval, (positionsWithTime[i + 1].second + positionsWithTime[i].second) * 0.5};
             }
             vec totalAcc(0.0, 0.0, 0.0);
             double countedAcc = 0.0;
-            for (size_t i = 0; i < velocities.size() - 1; ++i) {
+            for (size_t i = 0; i < velCount - 1; ++i) {
                vec dv = velocities[i + 1].first - velocities[i].first;
                double dtVel = velocities[i + 1].second - velocities[i].second;
                if (dtVel <= 1e-6) {
@@ -184,9 +181,12 @@ double Brain::CalculateTimeToAim(const vec& currentCameraPos, const vec& targetP
 vec Brain::CalculateInterceptionPoint(const obj& target, const vec& cameraPos) const {
    vec aimOrigin = cameraPos + CAMERA_LASER_OFFSET;
    double t = CalculateTimeToAim(aimOrigin, target.pos);
-   // Iteratively refine interception time where turret aim time equals target lead time
-   const int maxIterations = 15;
-   const double tolerance = 1e-4;
+   double speedSq = target.vel * target.vel;
+   if (speedSq < 1e-6) {
+      return target.pos;
+   }
+   const int maxIterations = 8;
+   const double tolerance = 1e-3;
    for (int i = 0; i < maxIterations; ++i) {
       vec futurePos = PredictPos(target, t);
       double tNext = CalculateTimeToAim(aimOrigin, futurePos);
@@ -194,7 +194,6 @@ vec Brain::CalculateInterceptionPoint(const obj& target, const vec& cameraPos) c
          t = tNext;
          break;
       }
-      // Damped update to ensure convergence
       t = 0.5 * (t + tNext);
    }
    return PredictPos(target, t);
@@ -233,11 +232,14 @@ double Brain::EvaluateThreatLevel(const obj& target, const vec& cameraPos) const
    return score;
 }
 
-obj& Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos) {
+Target Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos) {
    uint8_t best{};
-   double score{-1.0};
+   double score{0.0};
    bool found = false;
    for (const auto& [k, v] : objects) {
+      if (!v.isAlive || v.isFriendly) {
+         continue;
+      }
       double tmp{EvaluateThreatLevel(v, cameraPos)};
       if (tmp > score && isShotSafe(v.pos, MAX_LASER_RADIUS, objects, cameraPos)) {
          score = tmp;
@@ -246,31 +248,31 @@ obj& Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec&
       }
    }
    if (found) {
-      return objects.at(best);
+      return &objects.at(best);
    }
-   if (!objects.empty()) {
-      return objects.begin()->second;
-   }
-   throw std::out_of_range("No targets available in pickBestTarget");
+   return nullptr;
 }
 
 bool Brain::isShotSafe(const vec& targetPos, double laserRadius, const std::unordered_map<uint8_t, obj>& allObjects, vec cameraPos) {
    vec laserOrigin = cameraPos + CAMERA_LASER_OFFSET;
    vec beamDir = targetPos - laserOrigin;
    double beamLengthSq = beamDir * beamDir;
+   if (beamLengthSq < 1e-12) {
+      return true;
+   }
+   double beamLength = std::sqrt(beamLengthSq);
+   double maxT = std::max(1.0, MAX_DISTANCE / beamLength);
+   const double laserRadiusSq = laserRadius * laserRadius;
    for (const auto& [id, object] : allObjects) {
       if (!object.isFriendly || !object.isAlive) {
          continue;
       }
       vec toFriendly = object.pos - laserOrigin;
-      double t = 0.0;
-      if (beamLengthSq > 1e-12) {
-         t = (toFriendly * beamDir) / beamLengthSq;
-      }
-      t = std::clamp(t, 0.0, 1.0);
+      double t = (toFriendly * beamDir) / beamLengthSq;
+      t = std::clamp(t, 0.0, maxT);
       vec closestPoint = laserOrigin + (beamDir * t);
-      double dist = object.pos.distanceTo(closestPoint);
-      if (dist <= laserRadius) {
+      vec diff = object.pos - closestPoint;
+      if ((diff * diff) <= laserRadiusSq) {
          return false;
       }
    }

@@ -1,10 +1,12 @@
 #pragma once
 #include "comms.hpp"
 #include "constants.hpp"
+#include "logger.hpp"
 #include "logic.hpp"
 #include "physichs.hpp"
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 typedef struct ImageFrame {
    vec centerPos;                                        // position of the center of the camera frame in (x,y,z) coordinates
@@ -25,11 +27,11 @@ typedef struct ImageFrame {
 
 class Camera {
  public:
-   vec CamCenterPos;                            // Camera position
-   double frame_width, frame_height;            // dimensions of the camera frame in pixels
-   [[maybe_unused]] void calibrate(vec newPos); // calibrate the camera to a new position (smooth transition)
-   void reset();                                // reset camera to default position and parameters
-   void updateCamera(float deltaTime);          // update camera position and parameters based on velocity and acceleration (called every frame)
+   vec CamCenterPos;                   // Camera position
+   double frame_width, frame_height;   // dimensions of the camera frame in pixels
+   void calibrate(vec newPos);         // calibrate the camera to a new position (smooth transition)
+   void reset();                       // reset camera to default position and parameters
+   void updateCamera(float deltaTime); // update camera position and parameters based on velocity and acceleration (called every frame)
    constexpr Camera(vec pos = vec(0, 0, 0), double width = 1920.0F, double height = 1080.0F) : CamCenterPos(pos), frame_width(width), frame_height(height) {};
    friend std::ostream& operator<<(std::ostream& os, const Camera& cam);
    ~Camera() = default;
@@ -63,13 +65,14 @@ class Engine {
 
 class System {
  public:
+   CommunicatorDevice COMM_CHANNEL; // System communication channel
    Camera& camera;                  // Camera instance
    Engine& engineLeftYaw;           // Left yaw Engine instance
    Engine& engineRightYaw;          // Right yaw Engine instance
    Engine& enginePitch;             // Pitch Engine instance
    Laser& laser;                    // Laser instance
    Brain& brain;                    // Brain instance owned by System
-   CommunicatorDevice COMM_CHANNEL; // System communication channel
+   Logger& logger;                  // Logger instance owned by System
    double yawAngle{0.0};            // Yaw angle of the system in degrees
    double pitchAngle{0.0};          // Pitch angle of the system in degrees
    bool isShutDown{false};          // System state (shut down or running)
@@ -77,7 +80,8 @@ class System {
    void shutdown();                 // shut down the system
    void startup();                  // startup the system
    void reset();                    // reset the system
-   System(Camera& cam, Engine& engineLeftYaw, Engine& engineRightYaw, Engine& enginePitch, Laser& laser, Brain& brain);
+   void tick(float deltaTime);      // synchronous per-frame update for camera, engines, and kinematics
+   System(Camera& cam, Engine& engineLeftYaw, Engine& engineRightYaw, Engine& enginePitch, Laser& laser, Brain& brain, Logger& logger);
    ~System() = default;
    // Circular ring buffer frame management: in-place overwrite, zero heap allocation
    ImageFrame* pushFrame(vec centerPos = vec(0, 0, 0), uint64_t timestamp = 0);
@@ -92,12 +96,8 @@ class System {
 
  private:
    std::unordered_map<uint8_t, Object> trackedObjects;
+   std::unordered_set<uint8_t> destroyedTargets;
    ImageFrame framePool[HISTORY_FRAME_COUNTS];
    ImageFrame* HistoryFrames[HISTORY_FRAME_COUNTS]{};
    size_t frameCount{0};
-   void handleCameraSignal(sig signal); // handle camera-related signals
-   void handleEngineSignal(sig signal); // handle engine-related signals
-   void handleLaserSignal(sig signal);  // handle laser-related signals
-   void handleSystemSignal(sig signal); // handle system-related signals
-   void handleObjectSignal(sig signal); // handle object-related signals
 };

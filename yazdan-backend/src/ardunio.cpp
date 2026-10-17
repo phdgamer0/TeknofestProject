@@ -3,7 +3,9 @@
 #include "../include/logger.hpp"
 #include "../include/physichs.hpp"
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <vector>
 
 // --- ImageFrame Stream Operator ---
 std::ostream& operator<<(std::ostream& os, const ImageFrame& frame) {
@@ -74,13 +76,12 @@ void Engine::updateEngine(float deltaTime) {
 }
 
 std::ostream& operator<<(std::ostream& os, const Engine& engine) {
-   os << "Engine [Active: " << (engine.isActive ? "YES" : "NO") << ", Vel: " << engine.velocity
-      << ", Acc: " << engine.acceleration << "]";
+   os << "Engine [Active: " << (engine.isActive ? "YES" : "NO") << ", Vel: " << engine.velocity << ", Acc: " << engine.acceleration << "]";
    return os;
 }
 
 // --- System Implementation ---
-System::System(Camera& camera, Engine& engineLeftYaw, Engine& engineRightYaw, Engine& enginePitch, Laser& laser, Brain& brain) : camera(camera), engineLeftYaw(engineLeftYaw), engineRightYaw(engineRightYaw), enginePitch(enginePitch), laser(laser), brain(brain), yawAngle(0.0), pitchAngle(0.0), isShutDown(false), frameCount(0) {
+System::System(Camera& camera, Engine& engineLeftYaw, Engine& engineRightYaw, Engine& enginePitch, Laser& laser, Brain& brain, Logger& logger) : camera(camera), engineLeftYaw(engineLeftYaw), engineRightYaw(engineRightYaw), enginePitch(enginePitch), laser(laser), brain(brain), logger(logger), yawAngle(0.0), pitchAngle(0.0), isShutDown(false), frameCount(0) {
    std::fill(std::begin(HistoryFrames), std::end(HistoryFrames), nullptr);
 }
 
@@ -106,6 +107,42 @@ ImageFrame* System::pushFrame(vec centerPos, uint64_t timestamp) {
 }
 
 void System::updateKinematics() {
+   if (frameCount > 0) {
+      size_t latestIdx = (frameCount <= HISTORY_FRAME_COUNTS) ? (frameCount - 1) : (HISTORY_FRAME_COUNTS - 1);
+      if (HistoryFrames[latestIdx]) {
+         const auto& latestDetections = HistoryFrames[latestIdx]->detectedObjects;
+         for (const auto& [id, obj] : latestDetections) {
+            if (destroyedTargets.count(id)) {
+               continue; // Zombie balloon prevention: do not resurrect destroyed targets
+            }
+            auto it = trackedObjects.find(id);
+            if (it != trackedObjects.end()) {
+               double prevTimeUnderFire = it->second.timeUnderFire;
+               it->second = obj;
+               it->second.timeUnderFire = prevTimeUnderFire;
+               it->second.staleCount = 0;
+            }
+            else {
+               trackedObjects.emplace(id, obj);
+            }
+         }
+
+         // Target aging: prune ghost targets not seen for MAX_STALE_FRAMES
+         std::vector<uint8_t> lostIDs;
+         for (auto& [id, obj] : trackedObjects) {
+            if (!latestDetections.count(id)) {
+               obj.staleCount++;
+               if (obj.staleCount >= MAX_STALE_FRAMES) {
+                  lostIDs.push_back(id);
+               }
+            }
+         }
+         for (uint8_t lostId : lostIDs) {
+            trackedObjects.erase(lostId);
+            executeSignal(sig(SIGNALS::OBJECT_LOST));
+         }
+      }
+   }
    brain.CalculateVelocity(HistoryFrames, trackedObjects);
    brain.CalculateAcceleration(HistoryFrames, trackedObjects);
    brain.SmoothKinematics(trackedObjects, HistoryFrames);
@@ -140,40 +177,245 @@ void System::reset() {
    frameCount = 0;
    std::fill(std::begin(HistoryFrames), std::end(HistoryFrames), nullptr);
    trackedObjects.clear();
+   destroyedTargets.clear();
    camera.reset();
    engineLeftYaw.reset();
    engineRightYaw.reset();
    enginePitch.reset();
 }
 
-void System::executeSignal(sig signal) {
-   handleSystemSignal(signal);
-   handleCameraSignal(signal);
-   handleEngineSignal(signal);
-   handleLaserSignal(signal);
-   handleObjectSignal(signal);
+void System::tick(float deltaTime) {
+   if (isShutDown) {
+      return;
+   }
+
+   // 1. Drain and execute pending signals from the communication channel
+   while (auto pendingSignal = COMM_CHANNEL.popSignal()) {
+      executeSignal(*pendingSignal);
+   }
+
+   // 2. Advance subsystem physics for current deltaTime
+   camera.updateCamera(deltaTime);
+   engineLeftYaw.updateEngine(deltaTime);
+   engineRightYaw.updateEngine(deltaTime);
+   enginePitch.updateEngine(deltaTime);
+
+   // 3. Update kinematics filter (velocity, acceleration, smoothing) on all tracked objects
+   updateKinematics();
+
+   // 4. Select the highest threat target using greedy threat-scoring
+   obj* targetPtr = brain.pickBestTarget(trackedObjects, camera.CamCenterPos);
+   if (!targetPtr) {
+      if (laser.isOn) {
+         executeSignal(sig(SIGNALS::LASER_OFF));
+      }
+      engineLeftYaw.stop();
+      engineRightYaw.stop();
+      enginePitch.stop();
+      return;
+   }
+   obj& target = *targetPtr;
+
+   // 6. Calculate lead interception point based on target trajectory and turret rotation time
+   const vec aimOrigin = camera.CamCenterPos + CAMERA_LASER_OFFSET;
+   const vec interceptionPoint = brain.CalculateInterceptionPoint(target, camera.CamCenterPos);
+
+   // 7. Compute target Yaw and Pitch angles towards the interception point
+   const double targetYaw = aimOrigin.YawTo(interceptionPoint);
+   const double targetPitch = aimOrigin.PitchTo(interceptionPoint);
+
+   // Calculate angular errors and wrap yaw to [-180, 180] degrees
+   double deltaYaw = targetYaw - yawAngle;
+   while (deltaYaw > 180.0)
+      deltaYaw -= 360.0;
+   while (deltaYaw < -180.0)
+      deltaYaw += 360.0;
+   double deltaPitch = targetPitch - pitchAngle;
+
+   // 8. Command engines towards the target with velocity clamped to maximum limits
+   double yawVel = (deltaTime > 1e-6f) ? std::clamp(deltaYaw / deltaTime, -MAX_VELOCUTY_X, MAX_VELOCUTY_X) : 0.0;
+   double pitchVel = (deltaTime > 1e-6f) ? std::clamp(deltaPitch / deltaTime, -MAX_VELOCUTY_Y, MAX_VELOCUTY_Y) : 0.0;
+
+   vec yawVelVec(yawVel, 0.0, 0.0);
+   vec pitchVelVec(0.0, pitchVel, 0.0);
+
+   engineLeftYaw.move(yawVelVec);
+   engineRightYaw.move(yawVelVec);
+   enginePitch.move(pitchVelVec);
+
+    // Update turret angular position with wrap and mechanical pitch soft limits
+   yawAngle += yawVel * deltaTime;
+   while (yawAngle > 180.0)
+      yawAngle -= 360.0;
+   while (yawAngle < -180.0)
+      yawAngle += 360.0;
+   pitchAngle = std::clamp(pitchAngle + pitchVel * deltaTime, MIN_PITCH_DEG, MAX_PITCH_DEG);
+
+   // 9. Safety Check: Verify line of fire does not intersect any friendly unit
+   bool shotSafe = brain.isShotSafe(interceptionPoint, MAX_LASER_RADIUS, trackedObjects, camera.CamCenterPos);
+   if (!shotSafe) {
+      executeSignal(sig(SIGNALS::OBJECT_FRIENDLY_FIRE));
+      return;
+   }
+
+   // 10. Fire Control: Schmitt-Trigger hysteresis to prevent relay chatter
+   const double tolerance = laser.isOn ? AIM_HOLD_TOLERANCE_DEG : AIM_ENGAGE_TOLERANCE_DEG;
+   if (std::abs(deltaYaw) <= tolerance && std::abs(deltaPitch) <= tolerance) {
+      if (!laser.isOn) {
+         executeSignal(sig(SIGNALS::CAM_ON_TARGET));
+      }
+      target.timeUnderFire += deltaTime;
+
+      // Confirm destruction if target was sustained under fire for required duration
+      if (target.timeUnderFire >= TIME_UNDER_FIRE) {
+         target.isAlive = false;
+         destroyedTargets.insert(target.ID);
+         executeSignal(sig(SIGNALS::OBJECT_DESTROYED));
+      }
+   }
+   else {
+      if (laser.isOn) {
+         executeSignal(sig(SIGNALS::LASER_OFF));
+      }
+   }
 }
 
-void System::handleCameraSignal([[maybe_unused]] sig signal) {
-}
-void System::handleEngineSignal([[maybe_unused]] sig signal) {
-}
-void System::handleLaserSignal([[maybe_unused]] sig signal) {
-}
-void System::handleSystemSignal(sig signal) {
-   if (signal.signal == SIGNALS::SYSTEM_SHUTDOWN) {
-      shutdown();
-   }
-   else if (signal.signal == SIGNALS::SYSTEM_RESTART) {
+void System::executeSignal(sig signal) {
+   switch (signal.signal) {
+   case SIGNALS::SYSTEM_START:
+      startup();
+      break;
+
+   case SIGNALS::SYSTEM_STOP:
+      laser.turnOff();
+      engineLeftYaw.stop();
+      engineRightYaw.stop();
+      enginePitch.stop();
+      break;
+
+   case SIGNALS::SYSTEM_RESTART:
       reset();
+      startup();
+      break;
+
+   case SIGNALS::SYSTEM_SHUTDOWN:
+   case SIGNALS::SYSTEM_UNRESPONSIVE:
+      laser.turnOff();
+      engineLeftYaw.stop();
+      engineRightYaw.stop();
+      enginePitch.stop();
+      shutdown();
+      break;
+
+   case SIGNALS::CAM_START:
+   case SIGNALS::CAM_STOP:
+      break;
+
+   case SIGNALS::CAM_CALIBRATE:
+      if (std::holds_alternative<vec>(signal.value)) {
+         camera.calibrate(std::get<vec>(signal.value));
+      }
+      break;
+
+   case SIGNALS::CAM_RESET:
+      camera.reset();
+      break;
+
+   case SIGNALS::CAM_ON_TARGET:
+      laser.turnOn();
+      break;
+
+   case SIGNALS::CAM_UNRESPONSIVE:
+      laser.turnOff();
+      break;
+
+   case SIGNALS::YAW_ENGINE_MOVE:
+      if (std::holds_alternative<vec>(signal.value)) {
+         engineLeftYaw.move(std::get<vec>(signal.value));
+         engineRightYaw.move(std::get<vec>(signal.value));
+      }
+      break;
+
+   case SIGNALS::YAW_ENGINE_STOP:
+   case SIGNALS::YAW_ENGINE_LIMIT_REACHED:
+      engineLeftYaw.stop();
+      engineRightYaw.stop();
+      break;
+
+   case SIGNALS::YAW_ENGINE_CALIBRATE:
+      if (std::holds_alternative<vec>(signal.value)) {
+         engineLeftYaw.calibrate(std::get<vec>(signal.value));
+         engineRightYaw.calibrate(std::get<vec>(signal.value));
+      }
+      break;
+
+   case SIGNALS::YAW_ENGINE_RESET:
+      engineLeftYaw.reset();
+      engineRightYaw.reset();
+      break;
+
+   case SIGNALS::YAW_ENGINE_UNRESPONSIVE:
+      laser.turnOff();
+      engineLeftYaw.stop();
+      engineRightYaw.stop();
+      break;
+
+   case SIGNALS::PITCH_ENGINE_MOVE:
+      if (std::holds_alternative<vec>(signal.value)) {
+         enginePitch.move(std::get<vec>(signal.value));
+      }
+      break;
+
+   case SIGNALS::PITCH_ENGINE_STOP:
+   case SIGNALS::PITCH_ENGINE_LIMIT_REACHED:
+      enginePitch.stop();
+      break;
+
+   case SIGNALS::PITCH_ENGINE_CALIBRATE:
+      if (std::holds_alternative<vec>(signal.value)) {
+         enginePitch.calibrate(std::get<vec>(signal.value));
+      }
+      break;
+
+   case SIGNALS::PITCH_ENGINE_RESET:
+      enginePitch.reset();
+      break;
+
+   case SIGNALS::PITCH_ENGINE_UNRESPONSIVE:
+      laser.turnOff();
+      enginePitch.stop();
+      break;
+
+   case SIGNALS::LASER_ON:
+      laser.turnOn();
+      break;
+
+   case SIGNALS::LASER_OFF:
+   case SIGNALS::LASER_UNRESPONSIVE:
+   case SIGNALS::OBJECT_DESTROYED:
+   case SIGNALS::OBJECT_ESCAPED:
+   case SIGNALS::OBJECT_OUT_OF_RANGE:
+   case SIGNALS::OBJECT_LOST:
+      laser.turnOff();
+      break;
+
+   case SIGNALS::OBJECT_FRIENDLY_FIRE:
+      laser.turnOff();
+      logger.log("CRITICAL: Friendly fire condition detected! Laser disengaged.");
+      break;
+
+   case SIGNALS::OBJECT_DETECTED:
+   case SIGNALS::OBJECT_TRACKED:
+   case SIGNALS::OBJECT_SKIPPED:
+   case SIGNALS::NO_SIG:
+   default:
+      break;
    }
-}
-void System::handleObjectSignal([[maybe_unused]] sig signal) {
+
+   logger.logSignal(signal);
 }
 
 std::ostream& operator<<(std::ostream& os, const System& system) {
-   os << "System [ShutDown: " << (system.isShutDown ? "YES" : "NO")
-      << ", Yaw: " << system.yawAngle << ", Pitch: " << system.pitchAngle
-      << ", Tracked Objects: " << system.trackedObjects.size() << "]";
+   os << "System [ShutDown: " << (system.isShutDown ? "YES" : "NO") << ", Yaw: " << system.yawAngle << ", Pitch: " << system.pitchAngle << ", Tracked Objects: " << system.trackedObjects.size() << "]";
    return os;
 }

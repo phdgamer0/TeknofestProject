@@ -1,0 +1,33 @@
+# Build directories and artifacts
+build/
+bin/
+obj/
+yazdan-backend/build/
+*.o
+*.a
+*.so
+*.dylib
+*.out
+a.out
+engine
+
+visualizer
+
+# Logs, pipes, and IPC
+*.log
+logs.txt
+yazdan-backend/logs.txt
+*.bin
+
+# Temporary and editor files
+*.tmp
+*.bak
+*~
+.vscode/
+.idea/
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/

@@ -6,7 +6,6 @@
 #include "../include/logic.hpp"
 #include "../include/physichs.hpp"
 #include <cassert>
-#include <chrono>
 #include <cmath>
 #include <ctime>
 #include <fstream>
@@ -44,7 +43,8 @@ struct TestRig {
          laser(),
          brain(),
          logger("./yazdan-backend/logs.txt"),
-         sys(cam, leftYaw, rightYaw, pitch, laser, brain, logger) {}
+         sys(cam, leftYaw, rightYaw, pitch, laser, brain, logger) {
+   }
 };
 
 // -----------------------------------------------------------------------------
@@ -1302,7 +1302,7 @@ void run_benchmarked_scenario(void (*testFunc)()) {
    getrusage(RUSAGE_SELF, &endUsage);
 
    double wallMs = (endWall.tv_sec - startWall.tv_sec) * 1000.0 + (endWall.tv_nsec - startWall.tv_nsec) * 1e-6;
-   double cpuMs  = (endCpu.tv_sec - startCpu.tv_sec) * 1000.0 + (endCpu.tv_nsec - startCpu.tv_nsec) * 1e-6;
+   double cpuMs = (endCpu.tv_sec - startCpu.tv_sec) * 1000.0 + (endCpu.tv_nsec - startCpu.tv_nsec) * 1e-6;
    long currentRss = getCurrentRssKb();
    long currentPeakRss = endUsage.ru_maxrss;
 

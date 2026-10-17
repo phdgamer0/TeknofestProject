@@ -28,48 +28,45 @@ class RingBuffer {
    void clear();
 };
 
-using SignalValue = std::variant<std::monostate, vec, double, int, bool, std::string>;
+using SignalValue = std::variant<std::monostate, std::pair<vec, vec>, vec, double, int, bool, std::string>;
 enum class SIGNALS : uint8_t {
+   // SYSTEM signals
+   SYSTEM_START,
+   SYSTEM_STOP,
+   SYSTEM_RESTART,
+   SYSTEM_SHUTDOWN,
+   SYSTEM_UNRESPONSIVE,
+
    // CAMERA signals
-   CAM_MOVE,
+   CAM_START,
    CAM_STOP,
    CAM_CALIBRATE,
    CAM_RESET,
-   CAM_UPDATE,
    CAM_ON_TARGET,
    CAM_UNRESPONSIVE,
-   // YAW engine signals
+
+   // YAW engine signals (controls left & right yaw engines)
    YAW_ENGINE_MOVE,
    YAW_ENGINE_STOP,
    YAW_ENGINE_CALIBRATE,
    YAW_ENGINE_RESET,
-   YAW_ENGINE_UPDATE,
    YAW_ENGINE_LIMIT_REACHED,
    YAW_ENGINE_UNRESPONSIVE,
-   // PITCH engine signals (l/r)
-   PITCH_ENGINE_LEFT_MOVE,
-   PITCH_ENGINE_LEFT_STOP,
-   PITCH_ENGINE_LEFT_CALIBRATE,
-   PITCH_ENGINE_LEFT_RESET,
-   PITCH_ENGINE_LEFT_UPDATE,
-   PITCH_ENGINE_LEFT_LIMIT_REACHED,
-   PITCH_ENGINE_LEFT_UNRESPONSIVE,
-   PITCH_ENGINE_RIGHT_MOVE,
-   PITCH_ENGINE_RIGHT_STOP,
-   PITCH_ENGINE_RIGHT_CALIBRATE,
-   PITCH_ENGINE_RIGHT_RESET,
-   PITCH_ENGINE_RIGHT_UPDATE,
-   PITCH_ENGINE_RIGHT_LIMIT_REACHED,
-   PITCH_ENGINE_RIGHT_UNRESPONSIVE,
+
+   // PITCH engine signals (controls elevation engine)
+   PITCH_ENGINE_MOVE,
+   PITCH_ENGINE_STOP,
+   PITCH_ENGINE_CALIBRATE,
+   PITCH_ENGINE_RESET,
+   PITCH_ENGINE_LIMIT_REACHED,
+   PITCH_ENGINE_UNRESPONSIVE,
+
    // LASER signals
    LASER_ON,
    LASER_OFF,
    LASER_UNRESPONSIVE,
-   // SYSTEM signals
-   SYSTEM_SHUTDOWN,
-   SYSTEM_RESTART,
-   SYSTEM_UNRESPONSIVE,
-   // OBJECT signals
+
+   // OBJECT / TARGETING events
    OBJECT_DETECTED,
    OBJECT_TRACKED,
    OBJECT_SKIPPED,
@@ -78,9 +75,8 @@ enum class SIGNALS : uint8_t {
    OBJECT_OUT_OF_RANGE,
    OBJECT_FRIENDLY_FIRE,
    OBJECT_LOST,
-   // CUSTOM signals
-   SYSTEM_STOP,
-   SYSTEM_RESUME,
+
+   // SENTINEL
    NO_SIG
 };
 enum class Priority : uint8_t {

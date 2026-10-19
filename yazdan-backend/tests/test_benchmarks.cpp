@@ -16,6 +16,19 @@
 
 using Clock = std::chrono::high_resolution_clock;
 
+// -----------------------------------------------------------------------------
+// Google Benchmark-style optimization barriers to prevent DCE & LICM under -O3
+// -----------------------------------------------------------------------------
+template <typename T>
+inline __attribute__((always_inline)) void DoNotOptimize(const T& value) {
+   asm volatile("" : : "m"(value) : "memory");
+}
+
+template <typename T>
+inline __attribute__((always_inline)) void DoNotOptimize(T& value) {
+   asm volatile("" : "+m"(value) : : "memory");
+}
+
 // Helper to format benchmark output
 void print_bm(int id, const std::string& name, double elapsed_ms, uint64_t ops, const std::string& unit = "ops/sec") {
    double seconds = elapsed_ms / 1000.0;
@@ -38,7 +51,9 @@ void bm_01_vector_arithmetic() {
    vec v1(1.5, 2.5, 3.5), v2(0.5, 1.5, 2.5);
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(v1);
       v1 = (v1 + v2) * 0.999999;
+      DoNotOptimize(v1);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -54,8 +69,11 @@ void bm_02_vector_dot_cross() {
    double dotAccum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(v1);
       dotAccum += (v1 * v2);
       v1 = v1.cross(v2) * 0.00001;
+      DoNotOptimize(v1);
+      DoNotOptimize(dotAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -73,7 +91,9 @@ void bm_03_vector_angles() {
    double accum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(target);
       accum += origin.YawTo(target) + origin.PitchTo(target);
+      DoNotOptimize(accum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -90,7 +110,9 @@ void bm_04_cylindrical_to_cartesian() {
    vec cart;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(cyl);
       cart.CylindricalToCartesian(cyl);
+      DoNotOptimize(cart);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -106,7 +128,9 @@ void bm_05_cartesian_to_cylindrical() {
    vec cyl;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(cart);
       cyl.CartesianToCylindrical(cart);
+      DoNotOptimize(cyl);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -123,6 +147,7 @@ void bm_06_ring_buffer_push_pop() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       buffer.push(s);
+      DoNotOptimize(buffer.front());
       buffer.pop();
    }
    auto t1 = Clock::now();
@@ -142,8 +167,10 @@ void bm_07_communicator_priority_queue() {
    for (uint64_t i = 0; i < N; ++i) {
       comm.Receive(norm);
       comm.Receive(crit);
-      comm.popSignal();
-      comm.popSignal();
+      auto s1 = comm.popSignal();
+      auto s2 = comm.popSignal();
+      DoNotOptimize(s1);
+      DoNotOptimize(s2);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -164,6 +191,7 @@ void bm_08_flat_object_map_lookup() {
    for (uint64_t i = 0; i < N; ++i) {
       uint8_t key = static_cast<uint8_t>(i & 31);
       xAccum += map.at(key).pos.x;
+      DoNotOptimize(xAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -183,6 +211,7 @@ void bm_09_flat_object_map_insert_erase() {
       uint8_t id = static_cast<uint8_t>(i & 31);
       map.insert_or_assign(id, o);
       map.erase(id);
+      DoNotOptimize(map);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -203,6 +232,7 @@ void bm_10_map_comparison() {
    for (uint64_t i = 0; i < N; ++i) {
       uint8_t key = static_cast<uint8_t>(i & 31);
       accum += stdMap.at(key).pos.x;
+      DoNotOptimize(accum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -220,7 +250,9 @@ void bm_11_predict_pos() {
    vec res;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(o);
       res = brain.PredictPos(o, 0.5);
+      DoNotOptimize(res);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -239,7 +271,9 @@ void bm_12_calculate_time_to_aim() {
    double tAccum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(target);
       tAccum += brain.CalculateTimeToAim(cam, target);
+      DoNotOptimize(tAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -258,7 +292,9 @@ void bm_13_calculate_interception_point() {
    vec p;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(o);
       p = brain.CalculateInterceptionPoint(o, cam);
+      DoNotOptimize(p);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -278,7 +314,9 @@ void bm_14_evaluate_threat_level() {
    double score = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(o);
       score += brain.EvaluateThreatLevel(o, cam);
+      DoNotOptimize(score);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -303,7 +341,9 @@ void bm_15_is_shot_safe() {
    bool safe = false;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(target);
       safe = brain.isShotSafe(target, MAX_LASER_RADIUS, friendlies, cam);
+      DoNotOptimize(safe);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -336,7 +376,9 @@ void bm_16_calculate_velocity_swarm() {
 
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(tracked);
       brain.CalculateVelocity(sys.getHistoryFrames(), tracked);
+      DoNotOptimize(tracked);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -368,7 +410,9 @@ void bm_17_calculate_acceleration_swarm() {
 
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(tracked);
       brain.CalculateAcceleration(sys.getHistoryFrames(), tracked);
+      DoNotOptimize(tracked);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -400,7 +444,9 @@ void bm_18_smooth_kinematics_swarm() {
 
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(tracked);
       brain.SmoothKinematics(tracked, sys.getHistoryFrames());
+      DoNotOptimize(tracked);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -424,7 +470,9 @@ void bm_19_pick_best_target_16() {
    Target t = nullptr;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(targets);
       t = brain.pickBestTarget(targets, cam);
+      DoNotOptimize(t);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -449,7 +497,9 @@ void bm_20_pick_best_target_32() {
    Target t = nullptr;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(targets);
       t = brain.pickBestTarget(targets, cam);
+      DoNotOptimize(t);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -471,7 +521,8 @@ void bm_21_push_frame_recycling() {
 
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
-      sys.pushFrame(vec(0, 0, 0), i);
+      ImageFrame* f = sys.pushFrame(vec(0, 0, 0), i);
+      DoNotOptimize(f);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -498,6 +549,7 @@ void bm_22_update_kinematics_pipeline() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.updateKinematics();
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -519,6 +571,7 @@ void bm_23_execute_signal_speed() {
    sig s(SIGNALS::NO_SIG);
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(s);
       sys.executeSignal(s);
    }
    auto t1 = Clock::now();
@@ -547,6 +600,7 @@ void bm_24_system_tick_full_loop() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -578,6 +632,7 @@ void bm_25_high_density_swarm_tick() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -593,7 +648,9 @@ void bm_26_vector_magnitude() {
    double sum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(v);
       sum += v.magnitude();
+      DoNotOptimize(sum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -610,7 +667,9 @@ void bm_27_vector_distance_to() {
    double sum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(v1);
       sum += v1.distanceTo(v2);
+      DoNotOptimize(sum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -627,7 +686,9 @@ void bm_28_vector_angle_to() {
    double sum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(v1);
       sum += v1.angleTo(v2);
+      DoNotOptimize(sum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -648,11 +709,13 @@ void bm_29_point_to_ray_distance() {
 
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(friendlyPos);
       vec toFriendly = friendlyPos - laserOrigin;
       double t = (toFriendly * beamDir) / beamLengthSq;
       t = std::clamp(t, 0.0, 1.0);
       vec closestPoint = laserOrigin + (beamDir * t);
       distAccum += friendlyPos.distanceTo(closestPoint);
+      DoNotOptimize(distAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -669,7 +732,9 @@ void bm_30_savitzky_golay_kernel() {
    vec smoothed;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(p0);
       smoothed = (p0 * -3.0 + p1 * -2.0 + p2 * 3.0 + p3 * 12.0 + p4 * 25.0) / 35.0;
+      DoNotOptimize(smoothed);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -691,9 +756,11 @@ void bm_31_multi_point_extrapolation() {
    vec futureAccum;
    auto t0 = Clock::now();
    for (uint64_t iter = 0; iter < N; ++iter) {
-      for (const auto& tgt : targets) {
+      for (auto& tgt : targets) {
+         DoNotOptimize(tgt);
          for (int step = 1; step <= 10; ++step) {
             futureAccum += brain.PredictPos(tgt, step * 0.1);
+            DoNotOptimize(futureAccum);
          }
       }
    }
@@ -717,7 +784,9 @@ void bm_32_interception_solver_convergence() {
    vec intercept;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(fastEnemy);
       intercept = brain.CalculateInterceptionPoint(fastEnemy, cameraPos);
+      DoNotOptimize(intercept);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -745,8 +814,10 @@ void bm_33_batch_threat_evaluation_64() {
    double scoreSum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t iter = 0; iter < N; ++iter) {
-      for (const auto& tgt : swarm) {
+      for (auto& tgt : swarm) {
+         DoNotOptimize(tgt);
          scoreSum += brain.EvaluateThreatLevel(tgt, cameraPos);
+         DoNotOptimize(scoreSum);
       }
    }
    auto t1 = Clock::now();
@@ -774,7 +845,9 @@ void bm_34_is_shot_safe_16_friendlies() {
    bool safe = true;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(targetPos);
       safe &= brain.isShotSafe(targetPos, MAX_LASER_RADIUS, friendlies, cameraPos);
+      DoNotOptimize(safe);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -801,7 +874,9 @@ void bm_35_is_shot_safe_64_friendlies() {
    bool safe = true;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(targetPos);
       safe &= brain.isShotSafe(targetPos, MAX_LASER_RADIUS, friendlies, cameraPos);
+      DoNotOptimize(safe);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -824,8 +899,10 @@ void bm_36_flat_object_map_iteration() {
    double sumX = 0.0;
    auto t0 = Clock::now();
    for (uint64_t iter = 0; iter < N; ++iter) {
+      DoNotOptimize(map);
       for (const auto& [id, obj] : map) {
          sumX += obj.pos.x;
+         DoNotOptimize(sumX);
       }
    }
    auto t1 = Clock::now();
@@ -845,6 +922,7 @@ void bm_37_frame_insertion_churn_64() {
       for (uint8_t id = 1; id <= 64; ++id) {
          f.detectedObjects[id] = Object(vec(id, 0, 0));
       }
+      DoNotOptimize(f);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -861,6 +939,7 @@ void bm_38_ring_buffer_overwrite_churn() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       if (buffer.full()) {
+         DoNotOptimize(buffer.front());
          buffer.pop();
       }
       buffer.push(testSig);
@@ -877,10 +956,13 @@ void bm_39_engine_physics_integration() {
    constexpr uint64_t N = 10'000'000;
    Engine engine;
    vec targetVel(15.0, 0.0, 0.0);
-   engine.move(targetVel);
+   vec targetAcc(1.0, 0.5, -0.2);
+   engine.move(targetVel, targetAcc);
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(engine);
       engine.updateEngine(0.001f);
+      DoNotOptimize(engine.velocity);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -895,7 +977,9 @@ void bm_40_camera_pipeline_ingestion() {
    Camera cam;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(cam);
       cam.updateCamera(0.016f);
+      DoNotOptimize(cam);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -926,6 +1010,7 @@ void bm_41_system_tick_8_targets() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -956,6 +1041,7 @@ void bm_42_system_tick_16_targets() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -987,6 +1073,7 @@ void bm_43_system_tick_64_targets() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1018,6 +1105,7 @@ void bm_44_system_tick_128_targets() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.01f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1036,7 +1124,8 @@ void bm_45_communicator_signal_storm() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       comm.Receive((i % 2 == 0) ? crit : norm);
-      comm.popSignal();
+      auto val = comm.popSignal();
+      DoNotOptimize(val);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1066,6 +1155,7 @@ void bm_46_extractor_throughput() {
    for (uint64_t i = 0; i < N; ++i) {
       if (extractor.extract(dummy)) {
          readCount++;
+         DoNotOptimize(dummy);
       }
    }
    auto t1 = Clock::now();
@@ -1098,12 +1188,14 @@ void bm_48_yaw_wrap_around_speed() {
    double deltaYawAccum = 0.0;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(yaw);
       double delta = yaw - 10.0;
       while (delta > 180.0)
          delta -= 360.0;
       while (delta < -180.0)
          delta += 360.0;
       deltaYawAccum += delta;
+      DoNotOptimize(deltaYawAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1121,7 +1213,9 @@ void bm_49_finite_difference_fallback() {
    vec velAccum;
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
+      DoNotOptimize(posCurr);
       velAccum += (posCurr - posPrev) / dt;
+      DoNotOptimize(velAccum);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1150,6 +1244,7 @@ void bm_50_sustained_simulation_throughput() {
    auto t0 = Clock::now();
    for (uint64_t i = 0; i < N; ++i) {
       sys.tick(0.016f);
+      DoNotOptimize(sys);
    }
    auto t1 = Clock::now();
    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();

@@ -9,7 +9,7 @@
 template <const char* PATH = PIPE_FILE_PATH, typename arch = Object>
 class Extractor {
  private:
-   inline static std::ifstream pipe;
+   std::ifstream pipe;
    uint64_t p;
    [[nodiscard]] bool next();
 
@@ -55,8 +55,6 @@ template <const char* PATH, typename arch>
    if (pipe.gcount() == static_cast<std::streamsize>(sizeof(arch))) {
       p += sizeof(arch);
       ar.pos.CylindricalToCartesian(ar.pos);
-      ar.vel.CylindricalToCartesian(ar.vel);
-      ar.acc.CylindricalToCartesian(ar.acc);
       return true;
    }
    pipe.clear();

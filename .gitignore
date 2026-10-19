@@ -18,6 +18,8 @@ visualizer
 logs.txt
 yazdan-backend/logs.txt
 *.bin
+pipe/
+*.pipe
 
 # Temporary and editor files
 *.tmp

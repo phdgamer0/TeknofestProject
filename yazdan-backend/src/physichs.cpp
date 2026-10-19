@@ -115,7 +115,12 @@ double Vector3D::angleTo(const Vector3D& other) const {
    return toDegrees(std::acos(cosAngle));
 }
 double Vector3D::YawTo(const Vector3D& other) const {
-   return toDegrees(std::atan2(other.y - this->y, other.x - this->x));
+   double dx = other.x - this->x;
+   double dy = other.y - this->y;
+   if (std::hypot(dx, dy) < 1e-4) {
+      return 0.0;
+   }
+   return toDegrees(std::atan2(dy, dx));
 }
 double Vector3D::PitchTo(const Vector3D& other) const {
    double dx = other.x - this->x;

@@ -4,6 +4,7 @@
 
 #include "../include/ardunio.hpp"
 #include "../include/constants.hpp"
+#include "../include/extractor.hpp"
 #include "../include/logger.hpp"
 #include "../include/logic.hpp"
 #include "../include/physichs.hpp"
@@ -12,6 +13,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -46,7 +49,11 @@ enum class ScenarioMode {
    ZIG_ZAG_MANEUVER = 5,
    FRIENDLY_IN_LINE_OF_FIRE = 6,
    MULTI_TARGET_PRIORITY = 7,
-   RANDOM_SWARM = 8
+   RANDOM_SWARM = 8,
+   SPIRAL_CORKSCREW = 9,
+   POPUP_POP_DOWN = 10,
+   CLOSE_FORMATION_DECOY = 11,
+   PINCER_SWARM_INCURSION = 12
 };
 
 // Simulated physical balloon
@@ -75,9 +82,12 @@ struct VisualizerState {
    bool scopeView = false; // false = 3D Orbit Cam, true = Turret Scope Cam
    bool paused = false;
    int shaderMode = 0; // 0 = Tactical HUD, 1 = FLIR Thermal, 2 = Night Vision, 3 = Clean
+   bool pipeMode = true; // true = Send over python2cpp.pipe & read with Extractor, false = Direct Shared Memory
+   bool realisticNoise = true; // true = Camera centroid jitter + intermittent dropouts, false = Perfect synthetic
+   int droppedFramesCount = 0;
    float simTime = 0.0f;
    uint64_t frameCounter = 0;
-   uint8_t nextId = 10;
+   uint8_t nextId = 50;
    int targetsNeutralized = 0;
    int friendlyCasualties = 0;
    float announcementTimer = 0.0f;
@@ -425,6 +435,85 @@ void LoadScenario(ScenarioMode mode, System& sys, VisualizerState& state) {
       }
       break;
    }
+   case ScenarioMode::SPIRAL_CORKSCREW: {
+      state.announcementText = "SCENARIO 9: 3D HELICAL CORKSCREW MANEUVER (3-AXIS ACCELERATION)";
+      state.announcementTimer = 3.5f;
+      SimBalloon b;
+      b.id = 31;
+      b.pos = vec(16.5, 2.2, 2.4);
+      b.vel = vec(-1.3, 0, 0);
+      b.acc = vec(0, 0, 0);
+      b.isFriendly = false;
+      b.color = Color{244, 67, 54, 255};
+      state.simBalloons.push_back(b);
+      break;
+   }
+   case ScenarioMode::POPUP_POP_DOWN: {
+      state.announcementText = "SCENARIO 10: HIGH-G POP-UP & DIVE EVASION (PITCH RATE STRESS)";
+      state.announcementTimer = 3.5f;
+      SimBalloon b;
+      b.id = 32;
+      b.pos = vec(11.5, 0.0, 0.8);
+      b.vel = vec(0, 0, 0);
+      b.acc = vec(0, 0, 0);
+      b.isFriendly = false;
+      b.color = Color{244, 67, 54, 255};
+      state.simBalloons.push_back(b);
+      break;
+   }
+   case ScenarioMode::CLOSE_FORMATION_DECOY: {
+      state.announcementText = "SCENARIO 11: CLOSE-FORMATION ESCORT (SURGICAL WEAPON CLEARANCE)";
+      state.announcementTimer = 3.5f;
+      SimBalloon host;
+      host.id = 35;
+      host.pos = vec(12.5, -5.0, 2.0);
+      host.vel = vec(0, 1.8, 0);
+      host.acc = vec(0, 0, 0);
+      host.isFriendly = false;
+      host.color = Color{244, 67, 54, 255};
+      state.simBalloons.push_back(host);
+
+      SimBalloon escort;
+      escort.id = 36;
+      escort.pos = vec(12.1, -4.2, 2.0);
+      escort.vel = vec(0, 1.8, 0);
+      escort.acc = vec(0, 0, 0);
+      escort.isFriendly = true;
+      escort.color = Color{41, 182, 246, 255};
+      state.simBalloons.push_back(escort);
+      break;
+   }
+   case ScenarioMode::PINCER_SWARM_INCURSION: {
+      state.announcementText = "SCENARIO 12: DUAL-FLANK PINCER ATTACK (180 DEG AZIMUTH PIVOT)";
+      state.announcementTimer = 3.5f;
+      SimBalloon a;
+      a.id = 41;
+      a.pos = vec(12.0, -7.0, 1.8);
+      a.vel = vec(-1.6, 2.2, 0);
+      a.acc = vec(0, 0, 0);
+      a.isFriendly = false;
+      a.color = Color{244, 67, 54, 255};
+      state.simBalloons.push_back(a);
+
+      SimBalloon b;
+      b.id = 42;
+      b.pos = vec(10.5, 7.0, 2.2);
+      b.vel = vec(-1.8, -2.0, 0);
+      b.acc = vec(0, 0, 0);
+      b.isFriendly = false;
+      b.color = Color{244, 67, 54, 255};
+      state.simBalloons.push_back(b);
+
+      SimBalloon c;
+      c.id = 40;
+      c.pos = vec(7.0, 0.0, 1.0);
+      c.vel = vec(0, 0, 0);
+      c.acc = vec(0, 0, 0);
+      c.isFriendly = true;
+      c.color = Color{41, 182, 246, 255};
+      state.simBalloons.push_back(c);
+      break;
+   }
    }
 
    // PRIME THE BACKEND FILTERS:
@@ -516,6 +605,8 @@ int main() {
    Brain brain;
    Logger logger("./yazdan-backend/logs.txt");
    System sys(cam, leftYaw, rightYaw, pitch, laser, brain, logger);
+   std::filesystem::create_directories("./pipe");
+   Extractor<PIPE_FILE_PATH, Object> extractor;
 
    VisualizerState state;
    LoadScenario(state.mode, sys, state);
@@ -586,6 +677,28 @@ int main() {
       }
       if (IsKeyPressed(KEY_EIGHT)) {
          LoadScenario(ScenarioMode::RANDOM_SWARM, sys, state);
+      }
+      if (IsKeyPressed(KEY_NINE)) {
+         LoadScenario(ScenarioMode::SPIRAL_CORKSCREW, sys, state);
+      }
+      if (IsKeyPressed(KEY_ZERO)) {
+         LoadScenario(ScenarioMode::POPUP_POP_DOWN, sys, state);
+      }
+      if (IsKeyPressed(KEY_MINUS)) {
+         LoadScenario(ScenarioMode::CLOSE_FORMATION_DECOY, sys, state);
+      }
+      if (IsKeyPressed(KEY_EQUAL)) {
+         LoadScenario(ScenarioMode::PINCER_SWARM_INCURSION, sys, state);
+      }
+      if (IsKeyPressed(KEY_J)) {
+         state.realisticNoise = !state.realisticNoise;
+         state.announcementText = state.realisticNoise ? "SENSOR REALISM: NOISE JITTER (+/-8cm) & OCCLUSION LOSS [ON]" : "SENSOR REALISM: PERFECT SYNTHETIC DATA [OFF]";
+         state.announcementTimer = 3.0f;
+      }
+      if (IsKeyPressed(KEY_P)) {
+         state.pipeMode = !state.pipeMode;
+         state.announcementText = state.pipeMode ? "INGESTION: BINARY PIPE (python2cpp.pipe -> Extractor) [ON]" : "INGESTION: DIRECT SHARED MEMORY [OFF]";
+         state.announcementTimer = 3.0f;
       }
       if (IsKeyPressed(KEY_C)) {
          // Dynamically spawn extra balloon into active scenario
@@ -713,6 +826,78 @@ int main() {
                if (b.pos.z > 5.2 || b.pos.z < 0.8)
                   b.vel.z = -b.vel.z;
             }
+            else if (state.mode == ScenarioMode::SPIRAL_CORKSCREW) {
+               double omega = 2.2;
+               double r = 2.2;
+               b.pos.x -= 1.3 * dt;
+               if (b.pos.x <= 3.2) {
+                  b.pos.x = 17.5;
+               }
+               b.pos.y = r * std::cos(omega * state.simTime);
+               b.pos.z = 2.4 + r * std::sin(omega * state.simTime);
+               b.vel.x = -1.3;
+               b.vel.y = -r * omega * std::sin(omega * state.simTime);
+               b.vel.z = r * omega * std::cos(omega * state.simTime);
+               b.acc.x = 0;
+               b.acc.y = -r * omega * omega * std::cos(omega * state.simTime);
+               b.acc.z = -r * omega * omega * std::sin(omega * state.simTime);
+            }
+            else if (state.mode == ScenarioMode::POPUP_POP_DOWN) {
+               double cycle = std::fmod(state.simTime, 4.0);
+               if (cycle < 1.0) {
+                  b.pos.z = 0.8;
+                  b.vel = vec(0, 0.4 * std::sin(state.simTime * 4.0), 0);
+                  b.acc = vec(0, 0, 0);
+               }
+               else if (cycle < 2.2) {
+                  double tPhase = (cycle - 1.0) / 1.2;
+                  b.pos.z = 0.8 + 3.8 * std::sin(tPhase * M_PI * 0.5);
+                  b.vel.z = 3.8 * (M_PI * 0.5 / 1.2) * std::cos(tPhase * M_PI * 0.5);
+                  b.acc.z = -3.8 * std::pow(M_PI * 0.5 / 1.2, 2.0) * std::sin(tPhase * M_PI * 0.5);
+               }
+               else if (cycle < 2.8) {
+                  b.pos.z = 4.6;
+                  b.vel = vec(0, 0, 0);
+                  b.acc = vec(0, 0, 0);
+               }
+               else {
+                  double tPhase = (cycle - 2.8) / 1.2;
+                  b.pos.z = 4.6 - 3.8 * std::sin(tPhase * M_PI * 0.5);
+                  b.vel.z = -3.8 * (M_PI * 0.5 / 1.2) * std::cos(tPhase * M_PI * 0.5);
+                  b.acc.z = 3.8 * std::pow(M_PI * 0.5 / 1.2, 2.0) * std::sin(tPhase * M_PI * 0.5);
+               }
+            }
+            else if (state.mode == ScenarioMode::CLOSE_FORMATION_DECOY) {
+               if (!b.isFriendly) {
+                  b.pos += b.vel * dt;
+                  if (b.pos.y > 5.5) b.vel.y = -std::abs(b.vel.y);
+                  if (b.pos.y < -5.5) b.vel.y = std::abs(b.vel.y);
+               }
+               else {
+                  for (const auto& other : state.simBalloons) {
+                     if (!other.isFriendly && other.isAlive) {
+                        b.pos.x = other.pos.x - 0.40 + 0.25 * std::sin(state.simTime * 2.2);
+                        b.pos.y = other.pos.y + 0.80 * std::sin(state.simTime * 3.0);
+                        b.pos.z = other.pos.z + 0.30 * std::cos(state.simTime * 2.5);
+                        b.vel = other.vel;
+                        break;
+                     }
+                  }
+               }
+            }
+            else if (state.mode == ScenarioMode::PINCER_SWARM_INCURSION) {
+               if (!b.isFriendly) {
+                  b.pos += b.vel * dt;
+                  if (b.pos.x <= 2.5) {
+                     b.pos.x = (b.id == 41) ? 14.0 : 12.5;
+                     b.pos.y = (b.id == 41) ? -7.0 : 7.0;
+                  }
+                  if (b.id == 41 && b.pos.y > -0.5) b.vel.y = -std::abs(b.vel.y);
+                  if (b.id == 41 && b.pos.y < -7.5) b.vel.y = std::abs(b.vel.y);
+                  if (b.id == 42 && b.pos.y < 0.5) b.vel.y = std::abs(b.vel.y);
+                  if (b.id == 42 && b.pos.y > 7.5) b.vel.y = -std::abs(b.vel.y);
+               }
+            }
          }
 
          // Update 3D explosion particles
@@ -726,13 +911,76 @@ int main() {
          }
          state.particles.erase(std::remove_if(state.particles.begin(), state.particles.end(), [](const Particle& p) { return p.life <= 0.0f; }), state.particles.end());
 
-         // Feed objects into the next hardware camera image frame (passing true isAlive state)
-         ImageFrame* nextFrame = sys.pushFrame(vec(0, 0, 0), ++state.frameCounter);
-         for (const auto& b : state.simBalloons) {
-            Object o(b.pos, b.vel, b.acc, b.isFriendly);
-            o.ID = b.id;
-            o.isAlive = b.isAlive;
-            nextFrame->detectedObjects[b.id] = o;
+         // Feed objects into the next hardware camera image frame
+         ImageFrame* nextFrame = sys.pushFrame(cam.CamCenterPos, ++state.frameCounter);
+
+         if (state.pipeMode) {
+            // 1. Serialize simulated camera detections into the binary pipe (Cartesian -> Cylindrical)
+            {
+               std::ofstream pipeOut(PIPE_FILE_PATH, std::ios::out | std::ios::binary | std::ios::trunc);
+               if (pipeOut.is_open()) {
+                  for (const auto& b : state.simBalloons) {
+                     // Destroyed balloons that reached ground are not actively reported by detector
+                     if (!b.isAlive && b.pos.z <= 0.25)
+                        continue;
+
+                     // Intermittent Camera Detection Dropout / Occlusion (e.g. 7% frame loss if noise enabled)
+                     if (state.realisticNoise && b.isAlive && ((rand() % 100) < 7)) {
+                        state.droppedFramesCount++;
+                        continue; // Dropped packet for this frame
+                     }
+
+                     vec reportedPos = b.pos;
+                     if (state.realisticNoise && b.isAlive) {
+                        // Centroid jitter simulating detector pixel-level bounding-box center variance (~±7cm RMS)
+                        double jx = (((rand() % 200) - 100) / 1250.0);
+                        double jy = (((rand() % 200) - 100) / 1250.0);
+                        double jz = (((rand() % 160) - 80) / 1250.0);
+                        reportedPos += vec(jx, jy, jz);
+                     }
+
+                     Object packet(reportedPos, b.vel, b.acc, b.isFriendly);
+                     packet.ID = b.id;
+                     packet.isAlive = b.isAlive;
+                     // Convert to Cylindrical coordinates as expected across the binary pipe
+                     packet.pos.CartesianToCylindrical(reportedPos);
+                     pipeOut.write(reinterpret_cast<const char*>(&packet), sizeof(Object));
+                  }
+                  pipeOut.close();
+               }
+            }
+
+            // 2. Extractor ingests binary packets from PIPE_FILE_PATH and converts Cylindrical -> Cartesian
+            extractor.reset();
+            Object extractedObj;
+            while (extractor.extract(extractedObj)) {
+               nextFrame->detectedObjects[extractedObj.ID] = extractedObj;
+            }
+         }
+         else {
+            // Direct Memory Ingestion mode
+            for (const auto& b : state.simBalloons) {
+               if (!b.isAlive && b.pos.z <= 0.25)
+                  continue;
+
+               if (state.realisticNoise && b.isAlive && ((rand() % 100) < 7)) {
+                  state.droppedFramesCount++;
+                  continue;
+               }
+
+               vec reportedPos = b.pos;
+               if (state.realisticNoise && b.isAlive) {
+                  double jx = (((rand() % 200) - 100) / 1250.0);
+                  double jy = (((rand() % 200) - 100) / 1250.0);
+                  double jz = (((rand() % 160) - 80) / 1250.0);
+                  reportedPos += vec(jx, jy, jz);
+               }
+
+               Object o(reportedPos, b.vel, b.acc, b.isFriendly);
+               o.ID = b.id;
+               o.isAlive = b.isAlive;
+               nextFrame->detectedObjects[b.id] = o;
+            }
          }
 
          // Advance closed-loop targeting and fire control backend
@@ -1018,11 +1266,11 @@ int main() {
 
       DrawTextGPU(fontBold, "TEKNOFEST AIR DEFENSE C2 - 3D TACTICAL TESTBENCH", 25, 10, 24, GOLD);
 
-      std::string scenarioKeys = "SCENARIOS: [1] Stationary  [2] Crossing Fast  [3] Dive Bomber  [4] Accelerating  [5] Zig-Zag  [6] Friendly Safe  [7] Multi-Priority  [8] Swarm";
-      DrawTextGPU(fontBold, scenarioKeys, 25, 38, 18, RAYWHITE);
+      std::string scenarioKeys = "SCENARIOS: [1] Stat [2] Cross [3] Dive [4] Accel [5] ZigZag [6] Safe [7] Multi [8] Swarm [9] Spiral [0] PopUp [-] Decoy [=] Pincer";
+      DrawTextGPU(fontBold, scenarioKeys, 25, 36, 17, RAYWHITE);
 
-      std::string controlKeys = "[TAB] View: Orbit/Scope  |  [M] Shader Mode  |  [F11/F] Fullscreen  |  [SPACE] Pause  |  [C] Spawn  |  [R] Reset  |  [<-/->] Steer Friendly";
-      DrawTextGPU(fontReg, controlKeys, 25, 60, 16, LIGHTGRAY);
+      std::string controlKeys = "[TAB] View | [M] Shader | [J] Jitter (+/-8cm) | [P] Pipe IPC | [F11] Full | [SPACE] Pause | [C] Spawn | [R] Reset | [<-/->] Steer";
+      DrawTextGPU(fontReg, controlKeys, 25, 59, 15, LIGHTGRAY);
 
       // Top Right: Target Neutralized Tally & Friendly Casualties
       std::stringstream sTally;
@@ -1033,15 +1281,15 @@ int main() {
       DrawTextGPU(fontBold, sTally.str(), sw - (state.friendlyCasualties > 0 ? 560 : 280), 22, 22, state.friendlyCasualties > 0 ? RED : GREEN);
 
       // 4. Left Telemetry & Kinematics Panel
-      int panelW = 430;
-      int panelH = 430;
-      DrawRectangle(25, 105, panelW, panelH, ColorAlpha(BLACK, 0.80f));
+      int panelW = 460;
+      int panelH = 505;
+      DrawRectangle(25, 105, panelW, panelH, ColorAlpha(BLACK, 0.82f));
       DrawRectangleLines(25, 105, panelW, panelH, DARKGRAY);
 
-      DrawTextGPU(fontBold, "TURRET SYSTEM TELEMETRY", 45, 120, 22, YELLOW);
+      DrawTextGPU(fontBold, "TURRET SYSTEM TELEMETRY", 45, 118, 22, YELLOW);
 
       std::stringstream sMode;
-      sMode << "Active Scenario: ";
+      sMode << "Scenario: ";
       switch (state.mode) {
       case ScenarioMode::STATIONARY_TARGET:
          sMode << "1. Stationary Target";
@@ -1067,8 +1315,20 @@ int main() {
       case ScenarioMode::RANDOM_SWARM:
          sMode << "8. Dynamic 3D Swarm";
          break;
+      case ScenarioMode::SPIRAL_CORKSCREW:
+         sMode << "9. 3D Spiral Corkscrew Maneuver";
+         break;
+      case ScenarioMode::POPUP_POP_DOWN:
+         sMode << "10. High-G Pop-Up & Dive";
+         break;
+      case ScenarioMode::CLOSE_FORMATION_DECOY:
+         sMode << "11. Close Formation Escort Decoy";
+         break;
+      case ScenarioMode::PINCER_SWARM_INCURSION:
+         sMode << "12. Dual-Flank Pincer Attack";
+         break;
       }
-      DrawTextGPU(fontBold, sMode.str(), 45, 150, 19, SKYBLUE);
+      DrawTextGPU(fontBold, sMode.str(), 45, 145, 18, SKYBLUE);
 
       std::stringstream sYaw, sPitch, sVelY, sVelP;
       sYaw << "Yaw Position:     " << std::fixed << std::setprecision(2) << sys.yawAngle << " deg";
@@ -1076,42 +1336,49 @@ int main() {
       sVelY << "Yaw Motor Rate:   " << std::fixed << std::setprecision(1) << leftYaw.velocity.x << " deg/s";
       sVelP << "Pitch Motor Rate: " << std::fixed << std::setprecision(1) << pitch.velocity.y << " deg/s";
 
-      DrawTextGPU(fontBold, sYaw.str(), 45, 180, 20, WHITE);
-      DrawTextGPU(fontBold, sPitch.str(), 45, 208, 20, WHITE);
-      DrawTextGPU(fontReg, sVelY.str(), 45, 238, 19, LIGHTGRAY);
-      DrawTextGPU(fontReg, sVelP.str(), 45, 264, 19, LIGHTGRAY);
+      DrawTextGPU(fontBold, sYaw.str(), 45, 172, 19, WHITE);
+      DrawTextGPU(fontBold, sPitch.str(), 45, 196, 19, WHITE);
+      DrawTextGPU(fontReg, sVelY.str(), 45, 222, 17, LIGHTGRAY);
+      DrawTextGPU(fontReg, sVelP.str(), 45, 244, 17, LIGHTGRAY);
 
       // Weapon State Indicator Badge
       if (laser.isOn) {
-         DrawRectangle(45, 298, 250, 34, ColorAlpha(RED, 0.85f));
-         DrawRectangleLines(45, 298, 250, 34, YELLOW);
-         DrawTextGPU(fontBold, "LASER ACTIVE [FIRING]", 58, 304, 19, WHITE);
+         DrawRectangle(45, 272, 250, 32, ColorAlpha(RED, 0.85f));
+         DrawRectangleLines(45, 272, 250, 32, YELLOW);
+         DrawTextGPU(fontBold, "LASER ACTIVE [FIRING]", 58, 278, 18, WHITE);
       }
       else if (state.friendlyObstructed) {
-         DrawRectangle(45, 298, 250, 34, ColorAlpha(ORANGE, 0.85f));
-         DrawRectangleLines(45, 298, 250, 34, YELLOW);
-         DrawTextGPU(fontBold, "HOLD FIRE: SAFEGUARD", 52, 304, 19, BLACK);
+         DrawRectangle(45, 272, 250, 32, ColorAlpha(ORANGE, 0.85f));
+         DrawRectangleLines(45, 272, 250, 32, YELLOW);
+         DrawTextGPU(fontBold, "HOLD FIRE: SAFEGUARD", 52, 278, 18, BLACK);
       }
       else {
-         DrawRectangle(45, 298, 250, 34, ColorAlpha(DARKGREEN, 0.85f));
-         DrawRectangleLines(45, 298, 250, 34, LIME);
-         DrawTextGPU(fontBold, "LASER STANDBY [SEEK]", 56, 304, 19, WHITE);
+         DrawRectangle(45, 272, 250, 32, ColorAlpha(DARKGREEN, 0.85f));
+         DrawRectangleLines(45, 272, 250, 32, LIME);
+         DrawTextGPU(fontBold, "LASER STANDBY [SEEK]", 56, 278, 18, WHITE);
       }
 
-      // Camera Mode and Shader indicators
-      std::string viewStr = state.scopeView ? "Optic: 1st-Person Scope" : "Optic: 3D Orbit (R-Click Orbit)";
-      DrawTextGPU(fontBold, viewStr, 45, 345, 18, GOLD);
+      // Pipeline Ingestion & Noise Badges (Togglable)
+      std::string pipeStr = state.pipeMode ? "Pipe IPC: python2cpp.pipe -> Extractor [P: ON]" : "Pipe IPC: Direct Shared Bus [P: OFF]";
+      DrawTextGPU(fontBold, pipeStr, 45, 314, 16, state.pipeMode ? LIME : LIGHTGRAY);
 
-      std::string shaderNames[] = {"Shader: Tactical HUD", "Shader: FLIR Thermal IR", "Shader: Night Vision (NVG)", "Shader: Clean Raw"};
-      DrawTextGPU(fontBold, shaderNames[state.shaderMode], 45, 372, 18, LIME);
+      std::string noiseStr = state.realisticNoise ? "Sensor Noise: Real Jitter (+/-8cm) & Drops [J: ON]" : "Sensor Noise: Perfect Synthetic Data [J: OFF]";
+      DrawTextGPU(fontBold, noiseStr, 45, 338, 16, state.realisticNoise ? ORANGE : SKYBLUE);
+
+      // Camera Mode and Shader indicators
+      std::string viewStr = state.scopeView ? "Optic: 1st-Person Scope [TAB]" : "Optic: 3D Orbit (R-Click Rotate) [TAB]";
+      DrawTextGPU(fontBold, viewStr, 45, 364, 16, GOLD);
+
+      std::string shaderNames[] = {"Shader: Tactical HUD [M]", "Shader: FLIR Thermal IR [M]", "Shader: Night Vision (NVG) [M]", "Shader: Clean Raw [M]"};
+      DrawTextGPU(fontBold, shaderNames[state.shaderMode], 45, 388, 16, LIME);
 
       // Kill Lock Progress Bar
       if (currentBest && currentBest->isAlive && currentBest->timeUnderFire > 0) {
          float progress = static_cast<float>(currentBest->timeUnderFire / TIME_UNDER_FIRE);
-         DrawRectangle(45, 405, 350, 16, DARKGRAY);
-         DrawRectangle(45, 405, static_cast<int>(350 * std::clamp(progress, 0.0f, 1.0f)), 16, RED);
-         DrawRectangleLines(45, 405, 350, 16, WHITE);
-         DrawTextGPU(fontBold, "Sustained Burn Progress", 45, 424, 15, LIGHTGRAY);
+         DrawRectangle(45, 420, 370, 16, DARKGRAY);
+         DrawRectangle(45, 420, static_cast<int>(370 * std::clamp(progress, 0.0f, 1.0f)), 16, RED);
+         DrawRectangleLines(45, 420, 370, 16, WHITE);
+         DrawTextGPU(fontBold, "Sustained Burn Progress", 45, 440, 15, LIGHTGRAY);
       }
 
       // 5. Right Threat Matrix Panel

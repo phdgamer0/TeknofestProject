@@ -1,4 +1,5 @@
 #include "scenario_common.hpp"
+#include <cmath>
 
 // =============================================================================
 // Scenario 54: Schmitt-Trigger Laser Hysteresis Window

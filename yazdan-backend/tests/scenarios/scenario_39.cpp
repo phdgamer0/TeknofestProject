@@ -1,5 +1,5 @@
+#include "../../include/extractor.hpp"
 #include "scenario_common.hpp"
-
 // =============================================================================
 // Scenario 39: Extractor Empty Stream EOF Handling
 static constexpr char TEST_PIPE_FILE_39[] = "./yazdan-backend/build/test_packet_39.bin";

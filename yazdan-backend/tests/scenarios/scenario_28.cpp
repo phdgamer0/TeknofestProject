@@ -1,4 +1,5 @@
 #include "scenario_common.hpp"
+#include <cmath>
 
 // =============================================================================
 // Scenario 28: Near-Field Target & Zero-Division Safety

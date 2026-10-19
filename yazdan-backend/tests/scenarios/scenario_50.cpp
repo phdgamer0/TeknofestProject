@@ -1,4 +1,5 @@
 #include "scenario_common.hpp"
+#include <cmath>
 
 // =============================================================================
 // Scenario 50: Sustained 1,000-Tick Full Simulation Stability

@@ -1,3 +1,4 @@
+#include "../../include/extractor.hpp"
 #include "scenario_common.hpp"
 
 // =============================================================================

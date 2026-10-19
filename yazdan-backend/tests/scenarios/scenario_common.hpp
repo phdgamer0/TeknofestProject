@@ -1,8 +1,5 @@
 #pragma once
 #include "../../include/ardunio.hpp"
-#include "../../include/comms.hpp"
-#include "../../include/constants.hpp"
-#include "../../include/extractor.hpp"
 #include "../../include/logger.hpp"
 #include "../../include/logic.hpp"
 #include "../../include/physichs.hpp"
@@ -36,7 +33,8 @@ struct TestRig {
          laser(),
          brain(),
          logger("./yazdan-backend/logs.txt"),
-         sys(cam, leftYaw, rightYaw, pitch, laser, brain, logger) {}
+         sys(cam, leftYaw, rightYaw, pitch, laser, brain, logger) {
+   }
 };
 
 inline long getCurrentRssKb() {
@@ -72,7 +70,7 @@ inline int run_scenario(const std::string& id, const std::string& name, Func&& t
    clock_gettime(CLOCK_MONOTONIC_RAW, &endWall);
 
    double wallMs = (endWall.tv_sec - startWall.tv_sec) * 1000.0 + (endWall.tv_nsec - startWall.tv_nsec) * 1e-6;
-   double cpuMs  = (endCpu.tv_sec - startCpu.tv_sec) * 1000.0 + (endCpu.tv_nsec - startCpu.tv_nsec) * 1e-6;
+   double cpuMs = (endCpu.tv_sec - startCpu.tv_sec) * 1000.0 + (endCpu.tv_nsec - startCpu.tv_nsec) * 1e-6;
    long currentRss = getCurrentRssKb();
    long peakRss = getPeakRssKb();
 

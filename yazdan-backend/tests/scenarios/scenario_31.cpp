@@ -1,4 +1,5 @@
 #include "scenario_common.hpp"
+#include <cmath>
 
 // =============================================================================
 // Scenario 31: Continuous 360-Degree Azimuth Sweep

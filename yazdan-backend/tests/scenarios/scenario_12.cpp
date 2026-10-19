@@ -23,9 +23,10 @@ static void test() {
       rig.sys.tick(0.1f);
    }
 
-   // Target A destroyed after 30 ticks
-   for (int t = 0; t < 31; ++t) {
-      ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), 5 + t);
+   // Target A destroyed after enough ticks to satisfy TIME_UNDER_FIRE
+   int currentFrame = 5;
+   while (rig.sys.getTrackedObjects().at(enemyA).isAlive) {
+      ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), currentFrame++);
       Object a(vec(8.0, 0.0, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
       a.ID = enemyA;
       a.isAlive = true;
@@ -40,7 +41,7 @@ static void test() {
 
    assert(!rig.sys.getTrackedObjects().at(enemyA).isAlive && "Enemy A should be confirmed destroyed");
    // Advance 1 tick: System must switch focus to Enemy B
-   ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), 37);
+   ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), currentFrame++);
    Object b(vec(12.0, 2.0, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
    b.ID = enemyB;
    b.isAlive = true;

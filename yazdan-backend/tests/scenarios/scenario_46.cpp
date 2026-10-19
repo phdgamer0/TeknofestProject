@@ -1,5 +1,6 @@
 #include "scenario_common.hpp"
-
+#include <cmath>
+#include <limits>
 // =============================================================================
 // Scenario 46: NaN & Infinity Input Numerical Robustness
 // =============================================================================

@@ -22,12 +22,12 @@ class Brain {
    void SmoothKinematics(ImageFrame** HistoryFrames, std::unordered_map<uint8_t, obj>& objects) const;
 
    // Prediction & Targeting
-   vec PredictPos(const obj& target, double timeFuture) const;                         // predicts the position of the tracked target at the next frame
-   vec CalculateInterceptionPoint(const obj& target, const vec& cameraPos) const;      // calculates the exact point to intercept the target
-   double CalculateTimeToAim(const vec& currentCameraPos, const vec& targetPos) const; // returns the shortest time needed to intercept
+   vec PredictPos(const obj& target, double timeFuture) const;                                                                                                   // predicts the position of the tracked target at the next frame
+   vec CalculateInterceptionPoint(const obj& target, const vec& cameraPos, double currentYaw = 0.0, double currentPitch = 0.0) const;                           // calculates the exact point to intercept the target
+   double CalculateTimeToAim(const vec& currentCameraPos, const vec& targetPos, double currentYaw = 0.0, double currentPitch = 0.0) const;                      // returns the shortest time needed to intercept
 
    // Decision Making
-   double EvaluateThreatLevel(const obj& target, const vec& cameraPos) const;                                                    // returns the highest threat level for the greedy algorithm
-   Target pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos);                                       // returns the pointer to the best target
-   bool isShotSafe(const vec& targetPos, double laserRadius, const std::unordered_map<uint8_t, obj>& allObjects, vec cameraPos); // checks if it is safe to shot the tracked target
+   double EvaluateThreatLevel(const obj& target, const vec& cameraPos, double currentYaw = 0.0, double currentPitch = 0.0) const;                                 // returns the highest threat level for the greedy algorithm
+   Target pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos, double currentYaw = 0.0, double currentPitch = 0.0);                   // returns the pointer to the best target
+   bool isShotSafe(const vec& targetPos, double laserRadius, const std::unordered_map<uint8_t, obj>& allObjects, vec cameraPos);                                // checks if it is safe to shot the tracked target
 };

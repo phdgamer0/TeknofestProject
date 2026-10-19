@@ -167,29 +167,35 @@ vec Brain::PredictPos(const obj& target, double timeFuture) const {
    return target.pos + (target.vel * timeFuture) + (target.acc * (0.5 * timeFuture * timeFuture));
 }
 
-double Brain::CalculateTimeToAim(const vec& currentCameraPos, const vec& targetPos) const {
-   double deltaYaw = std::abs(currentCameraPos.YawTo(targetPos));
+double Brain::CalculateTimeToAim(const vec& currentCameraPos, const vec& targetPos, double currentYaw, double currentPitch) const {
+   double targetYaw = currentCameraPos.YawTo(targetPos);
+   double deltaYaw = std::abs(targetYaw - currentYaw);
+   while (deltaYaw > 360.0) {
+      deltaYaw -= 360.0;
+   }
    if (deltaYaw > 180.0) {
       deltaYaw = 360.0 - deltaYaw;
    }
-   double deltaPitch = std::abs(currentCameraPos.PitchTo(targetPos));
+   double targetPitch = currentCameraPos.PitchTo(targetPos);
+   double deltaPitch = std::abs(targetPitch - currentPitch);
    double timeX = (MAX_VELOCUTY_X > 1e-6) ? (deltaYaw / MAX_VELOCUTY_X) : 0.0;
    double timeY = (MAX_VELOCUTY_Y > 1e-6) ? (deltaPitch / MAX_VELOCUTY_Y) : 0.0;
    return std::max(timeX, timeY);
 }
 
-vec Brain::CalculateInterceptionPoint(const obj& target, const vec& cameraPos) const {
+vec Brain::CalculateInterceptionPoint(const obj& target, const vec& cameraPos, double currentYaw, double currentPitch) const {
    vec aimOrigin = cameraPos + CAMERA_LASER_OFFSET;
-   double t = CalculateTimeToAim(aimOrigin, target.pos);
+   double t = CalculateTimeToAim(aimOrigin, target.pos, currentYaw, currentPitch);
    double speedSq = target.vel * target.vel;
-   if (speedSq < 1e-6) {
+   double accSq = target.acc * target.acc;
+   if (speedSq < 1e-6 && accSq < 1e-6) {
       return target.pos;
    }
    const int maxIterations = 8;
    const double tolerance = 1e-3;
    for (int i = 0; i < maxIterations; ++i) {
       vec futurePos = PredictPos(target, t);
-      double tNext = CalculateTimeToAim(aimOrigin, futurePos);
+      double tNext = CalculateTimeToAim(aimOrigin, futurePos, currentYaw, currentPitch);
       if (std::abs(tNext - t) < tolerance) {
          t = tNext;
          break;
@@ -199,7 +205,7 @@ vec Brain::CalculateInterceptionPoint(const obj& target, const vec& cameraPos) c
    return PredictPos(target, t);
 }
 
-double Brain::EvaluateThreatLevel(const obj& target, const vec& cameraPos) const {
+double Brain::EvaluateThreatLevel(const obj& target, const vec& cameraPos, double currentYaw, double currentPitch) const {
    // 1. Hard filters: ignore friendlies or dead targets
    if (target.isFriendly || !target.isAlive) {
       return 0.0;
@@ -219,7 +225,7 @@ double Brain::EvaluateThreatLevel(const obj& target, const vec& cameraPos) const
    double closingAcc = -(relPos * target.acc) / distance;
    double fAcc = std::clamp(closingAcc / MAX_EXPECTED_ACC, 0.0, 1.0);
    // Aiming Opportunity
-   double aimTime = CalculateTimeToAim(cameraPos, target.pos);
+   double aimTime = CalculateTimeToAim(cameraPos, target.pos, currentYaw, currentPitch);
    double fAim = std::max(0.0, 1.0 - (aimTime / MAX_AIM_TIME));
    // Kill Confirmation Hysteresis (finish targets already under fire)
    double fFireProgress = std::min(1.0, target.timeUnderFire / TIME_UNDER_FIRE);
@@ -232,7 +238,7 @@ double Brain::EvaluateThreatLevel(const obj& target, const vec& cameraPos) const
    return score;
 }
 
-Target Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos) {
+Target Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const vec& cameraPos, double currentYaw, double currentPitch) {
    uint8_t best{};
    double score{0.0};
    bool found = false;
@@ -240,11 +246,14 @@ Target Brain::pickBestTarget(std::unordered_map<uint8_t, obj>& objects, const ve
       if (!v.isAlive || v.isFriendly) {
          continue;
       }
-      double tmp{EvaluateThreatLevel(v, cameraPos)};
-      if (tmp > score && isShotSafe(v.pos, MAX_LASER_RADIUS, objects, cameraPos)) {
-         score = tmp;
-         best = k;
-         found = true;
+      double tmp{EvaluateThreatLevel(v, cameraPos, currentYaw, currentPitch)};
+      if (tmp > score) {
+         vec interceptPoint = CalculateInterceptionPoint(v, cameraPos, currentYaw, currentPitch);
+         if (isShotSafe(interceptPoint, MAX_LASER_RADIUS, objects, cameraPos)) {
+            score = tmp;
+            best = k;
+            found = true;
+         }
       }
    }
    if (found) {
@@ -269,7 +278,9 @@ bool Brain::isShotSafe(const vec& targetPos, double laserRadius, const std::unor
       }
       vec toFriendly = object.pos - laserOrigin;
       double t = (toFriendly * beamDir) / beamLengthSq;
-      t = std::clamp(t, 0.0, maxT);
+      if (t < 0.0 || t > maxT) {
+         continue;
+      }
       vec closestPoint = laserOrigin + (beamDir * t);
       vec diff = object.pos - closestPoint;
       if ((diff * diff) <= laserRadiusSq) {

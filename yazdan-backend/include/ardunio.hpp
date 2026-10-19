@@ -96,7 +96,7 @@ class System {
 
  private:
    std::unordered_map<uint8_t, Object> trackedObjects;
-   std::unordered_set<uint8_t> destroyedTargets;
+   std::unordered_map<uint8_t, double> destroyedTargets; // maps target ID to remaining quarantine cooldown in seconds
    ImageFrame framePool[HISTORY_FRAME_COUNTS];
    ImageFrame* HistoryFrames[HISTORY_FRAME_COUNTS]{};
    size_t frameCount{0};

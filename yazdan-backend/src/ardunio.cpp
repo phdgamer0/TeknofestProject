@@ -200,11 +200,23 @@ void System::tick(float deltaTime) {
    engineRightYaw.updateEngine(deltaTime);
    enginePitch.updateEngine(deltaTime);
 
+   // Update quarantine timers for destroyed target IDs to allow safe tracker ID recycling
+   std::vector<uint8_t> expiredQuarantines;
+   for (auto& [id, remainingTime] : destroyedTargets) {
+      remainingTime -= deltaTime;
+      if (remainingTime <= 0.0) {
+         expiredQuarantines.push_back(id);
+      }
+   }
+   for (uint8_t id : expiredQuarantines) {
+      destroyedTargets.erase(id);
+   }
+
    // 3. Update kinematics filter (velocity, acceleration, smoothing) on all tracked objects
    updateKinematics();
 
    // 4. Select the highest threat target using greedy threat-scoring
-   obj* targetPtr = brain.pickBestTarget(trackedObjects, camera.CamCenterPos);
+   obj* targetPtr = brain.pickBestTarget(trackedObjects, camera.CamCenterPos, yawAngle, pitchAngle);
    if (!targetPtr) {
       if (laser.isOn) {
          executeSignal(sig(SIGNALS::LASER_OFF));
@@ -218,7 +230,7 @@ void System::tick(float deltaTime) {
 
    // 6. Calculate lead interception point based on target trajectory and turret rotation time
    const vec aimOrigin = camera.CamCenterPos + CAMERA_LASER_OFFSET;
-   const vec interceptionPoint = brain.CalculateInterceptionPoint(target, camera.CamCenterPos);
+   const vec interceptionPoint = brain.CalculateInterceptionPoint(target, camera.CamCenterPos, yawAngle, pitchAngle);
 
    // 7. Compute target Yaw and Pitch angles towards the interception point
    const double targetYaw = aimOrigin.YawTo(interceptionPoint);
@@ -259,8 +271,16 @@ void System::tick(float deltaTime) {
    }
 
    // 10. Fire Control: Schmitt-Trigger hysteresis to prevent relay chatter
+   // Compute live post-motion error to avoid 1-frame fire control latency
+   double postDeltaYaw = targetYaw - yawAngle;
+   while (postDeltaYaw > 180.0)
+      postDeltaYaw -= 360.0;
+   while (postDeltaYaw < -180.0)
+      postDeltaYaw += 360.0;
+   double postDeltaPitch = targetPitch - pitchAngle;
+
    const double tolerance = laser.isOn ? AIM_HOLD_TOLERANCE_DEG : AIM_ENGAGE_TOLERANCE_DEG;
-   if (std::abs(deltaYaw) <= tolerance && std::abs(deltaPitch) <= tolerance) {
+   if (std::abs(postDeltaYaw) <= tolerance && std::abs(postDeltaPitch) <= tolerance) {
       if (!laser.isOn) {
          executeSignal(sig(SIGNALS::CAM_ON_TARGET));
       }
@@ -269,7 +289,7 @@ void System::tick(float deltaTime) {
       // Confirm destruction if target was sustained under fire for required duration
       if (target.timeUnderFire >= TIME_UNDER_FIRE) {
          target.isAlive = false;
-         destroyedTargets.insert(target.ID);
+         destroyedTargets[target.ID] = ZOMBIE_QUARANTINE_SECONDS;
          executeSignal(sig(SIGNALS::OBJECT_DESTROYED));
       }
    }

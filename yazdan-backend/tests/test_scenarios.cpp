@@ -1384,7 +1384,7 @@ void test_scenario_60_turret_orientation_aware_aim_time() {
 void test_scenario_61_single_step_slew_zero_latency() {
    std::cout << "[Scenario 61] Single-Step Slew Zero-Latency Laser Engagement: ";
    TestRig rig;
-   double yCoord = 10.0 * std::tan(4.0 * M_PI / 180.0);
+   double yCoord = 10.0 * std::tan(toRadians(4.0));
    Object enemy(vec(10.0, yCoord, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
    enemy.ID = 160;
    enemy.isAlive = true;

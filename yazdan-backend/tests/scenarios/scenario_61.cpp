@@ -1,4 +1,5 @@
 #include "scenario_common.hpp"
+#include <cmath>
 
 // =============================================================================
 // Scenario 61: Single-Step Slew Zero-Latency Laser Engagement
@@ -7,8 +8,7 @@ static void test() {
    TestRig rig;
 
    // Target at approx 4.0 degrees yaw from (0,0,0)
-   // tan(4 deg) = 0.0699, at x = 10m, y = 0.699m
-   double yCoord = 10.0 * std::tan(4.0 * M_PI / 180.0);
+   double yCoord = 10.0 * std::tan(toRadians(4.0));
    Object enemy(vec(10.0, yCoord, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
    enemy.ID = 160;
    enemy.isAlive = true;

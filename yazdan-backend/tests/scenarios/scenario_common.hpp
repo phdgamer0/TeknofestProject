@@ -4,14 +4,10 @@
 #include "../../include/logic.hpp"
 #include "../../include/physichs.hpp"
 #include <cassert>
-#include <chrono>
-#include <cmath>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <sstream>
 #include <string>
 #include <sys/resource.h>
 #include <unistd.h>

@@ -1279,6 +1279,221 @@ void test_scenario_56_reentrant_thread_safe_logging() {
 }
 
 // -----------------------------------------------------------------------------
+// Scenario 57: Behind-Shooter Friendly Balloon Laser Safety
+// -----------------------------------------------------------------------------
+void test_scenario_57_behind_shooter_friendly_fire_safety() {
+   std::cout << "[Scenario 57] Behind-Shooter Friendly Balloon Laser Safety: ";
+   TestRig rig;
+   std::unordered_map<uint8_t, Object> objects;
+   Object friendlyBehind(vec(-0.5, 0.2, 0.0), vec(0, 0, 0), vec(0, 0, 0), true);
+   friendlyBehind.ID = 150;
+   friendlyBehind.isAlive = true;
+   objects[150] = friendlyBehind;
+
+   vec enemyPos(10.0, 0.0, 0.0);
+   Object enemy(enemyPos, vec(0, 0, 0), vec(0, 0, 0), false);
+   enemy.ID = 151;
+   enemy.isAlive = true;
+   objects[151] = enemy;
+
+   bool isSafe = rig.brain.isShotSafe(enemyPos, MAX_LASER_RADIUS, objects, rig.cam.CamCenterPos);
+   assert(isSafe && "Friendly balloon strictly behind the shooter must NEVER inhibit forward laser fire");
+
+   for (int i = 0; i < 5; ++i) {
+      ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), i);
+      f->detectedObjects[150] = friendlyBehind;
+      f->detectedObjects[151] = enemy;
+      rig.sys.tick(0.1f);
+   }
+   assert(rig.laser.isOn && "Laser must engage forward enemy despite rear friendly balloon");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 58: Interception Point Safety Deadlock Resolution
+// -----------------------------------------------------------------------------
+void test_scenario_58_interception_lead_safety_deadlock_resolution() {
+   std::cout << "[Scenario 58] Interception Point Safety Deadlock Resolution: ";
+   TestRig rig;
+   std::unordered_map<uint8_t, Object> objects;
+
+   Object enemyA(vec(8.0, 5.0, 0.0), vec(0.0, 5.0, 0.0), vec(0, 0, 0), false);
+   enemyA.ID = 153;
+   enemyA.isAlive = true;
+   objects[153] = enemyA;
+
+   Object friendly(vec(4.05, 3.335, 0.0), vec(0, 0, 0), vec(0, 0, 0), true);
+   friendly.ID = 152;
+   friendly.isAlive = true;
+   objects[152] = friendly;
+
+   Object enemyB(vec(8.0, -2.0, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
+   enemyB.ID = 154;
+   enemyB.isAlive = true;
+   objects[154] = enemyB;
+
+   vec interceptA = rig.brain.CalculateInterceptionPoint(enemyA, rig.cam.CamCenterPos);
+   bool safeAtPos = rig.brain.isShotSafe(enemyA.pos, MAX_LASER_RADIUS, objects, rig.cam.CamCenterPos);
+   bool safeAtIntercept = rig.brain.isShotSafe(interceptA, MAX_LASER_RADIUS, objects, rig.cam.CamCenterPos);
+   assert(safeAtPos && "Enemy A instantaneous position should have clear line of fire");
+   assert(!safeAtIntercept && "Enemy A lead interception point must be blocked by friendly unit");
+
+   Target chosen = rig.brain.pickBestTarget(objects, rig.cam.CamCenterPos);
+   assert(chosen != nullptr && "A valid target must be selected");
+   assert(chosen->ID == 154 && "System must select Enemy B because Enemy A's lead interception point is obstructed");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 59: Pure Acceleration Lead Estimation from Rest
+// -----------------------------------------------------------------------------
+void test_scenario_59_pure_acceleration_lead_estimation() {
+   std::cout << "[Scenario 59] Pure Acceleration Lead Estimation from Rest: ";
+   TestRig rig;
+   Object acceleratingEnemy(vec(10.0, 3.0, 0.0), vec(0.0, 0.0, 0.0), vec(0.0, 6.0, 0.0), false);
+   acceleratingEnemy.ID = 155;
+   acceleratingEnemy.isAlive = true;
+
+   vec intercept = rig.brain.CalculateInterceptionPoint(acceleratingEnemy, rig.cam.CamCenterPos);
+   double leadDisplacement = intercept.y - acceleratingEnemy.pos.y;
+   assert(leadDisplacement > 0.01 && "Interception solver must compute lead for accelerating target starting from rest");
+   assert(std::abs(intercept.x - 10.0) < 1e-3 && "X coordinate must remain on target trajectory plane");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 60: Turret Orientation Aware Slew and Aim Time
+// -----------------------------------------------------------------------------
+void test_scenario_60_turret_orientation_aware_aim_time() {
+   std::cout << "[Scenario 60] Turret Orientation Aware Slew and Aim Time: ";
+   TestRig rig;
+   vec targetAt90(0.0, 10.0, 0.0);
+   vec targetAt0(10.0, 0.0, 0.0);
+
+   double slewTo90 = rig.brain.CalculateTimeToAim(rig.cam.CamCenterPos, targetAt90, 90.0, 0.0);
+   double slewTo0 = rig.brain.CalculateTimeToAim(rig.cam.CamCenterPos, targetAt0, 90.0, 0.0);
+
+   assert(slewTo90 < 0.01 && "Aim time to on-axis target must be practically zero");
+   assert(std::abs(slewTo0 - (90.0 / MAX_VELOCUTY_X)) < 1e-3 && "Aim time to off-axis target must reflect true 90-degree motor travel");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 61: Single-Step Slew Zero-Latency Laser Engagement
+// -----------------------------------------------------------------------------
+void test_scenario_61_single_step_slew_zero_latency() {
+   std::cout << "[Scenario 61] Single-Step Slew Zero-Latency Laser Engagement: ";
+   TestRig rig;
+   double yCoord = 10.0 * std::tan(4.0 * M_PI / 180.0);
+   Object enemy(vec(10.0, yCoord, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
+   enemy.ID = 160;
+   enemy.isAlive = true;
+
+   ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), 1);
+   f->detectedObjects[160] = enemy;
+   rig.sys.tick(0.1f);
+
+   assert(rig.laser.isOn && "Laser must turn ON immediately on the step the turret aligns, with 0 frame latency");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 62: Destroyed Target ID Quarantine Expiry & Recycling
+// -----------------------------------------------------------------------------
+void test_scenario_62_target_id_quarantine_expiry_and_recycling() {
+   std::cout << "[Scenario 62] Destroyed Target ID Quarantine Expiry & Recycling: ";
+   TestRig rig;
+   constexpr uint8_t recycledID = 165;
+
+   for (int i = 0; i < 20; ++i) {
+      ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), i);
+      Object enemy(vec(8.0, 0.0, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
+      enemy.ID = recycledID;
+      enemy.isAlive = true;
+      f->detectedObjects[recycledID] = enemy;
+      rig.sys.tick(0.1f);
+   }
+   assert(!rig.sys.getTrackedObjects().at(recycledID).isAlive && "Target 165 must be confirmed destroyed");
+
+   for (int i = 20; i < 55; ++i) {
+      rig.sys.pushFrame(vec(0, 0, 0), i);
+      rig.sys.tick(0.1f);
+   }
+
+   ImageFrame* f = rig.sys.pushFrame(vec(0, 0, 0), 55);
+   Object newEnemy(vec(10.0, 2.0, 0.0), vec(0, 0, 0), vec(0, 0, 0), false);
+   newEnemy.ID = recycledID;
+   newEnemy.isAlive = true;
+   f->detectedObjects[recycledID] = newEnemy;
+   rig.sys.tick(0.1f);
+
+   assert(rig.sys.getTrackedObjects().count(recycledID) && "Recycled target ID must be admitted after quarantine");
+   assert(rig.sys.getTrackedObjects().at(recycledID).isAlive && "New target reusing ID must be tracked as alive");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 63: Extractor Instance Stream State Isolation
+// -----------------------------------------------------------------------------
+static constexpr char TEST_PIPE_63_A[] = "./yazdan-backend/build/test_packet_63_a.bin";
+static constexpr char TEST_PIPE_63_B[] = "./yazdan-backend/build/test_packet_63_b.bin";
+
+void test_scenario_63_extractor_stream_isolation() {
+   std::cout << "[Scenario 63] Extractor Instance Stream State Isolation: ";
+   Object objA(vec(10.0, 0.0, 0.0), vec(2.5, 1.5, 0.0), vec(0, 0, 0), false);
+   objA.ID = 71;
+   objA.isAlive = true;
+
+   Object objB(vec(15.0, 0.0, 0.0), vec(0.0, -3.0, 1.0), vec(0, 0, 0), false);
+   objB.ID = 72;
+   objB.isAlive = true;
+
+   {
+      std::ofstream outA(TEST_PIPE_63_A, std::ios::binary | std::ios::trunc);
+      outA.write(reinterpret_cast<const char*>(&objA), sizeof(Object));
+   }
+   {
+      std::ofstream outB(TEST_PIPE_63_B, std::ios::binary | std::ios::trunc);
+      outB.write(reinterpret_cast<const char*>(&objB), sizeof(Object));
+   }
+
+   Extractor<TEST_PIPE_63_A, Object> extA;
+   Extractor<TEST_PIPE_63_B, Object> extB;
+
+   auto resA = extA.extract();
+   auto resB = extB.extract();
+
+   assert(resA.has_value() && resB.has_value() && "Both extractors must successfully read from distinct pipes");
+   assert(resA->ID == 71 && resB->ID == 72 && "Stream isolation must preserve correct object IDs");
+   assert(std::abs(resA->vel.x - 2.5) < 1e-4 && "Cartesian velocity X must be preserved");
+   assert(std::abs(resA->vel.y - 1.5) < 1e-4 && "Cartesian velocity Y must be preserved");
+   assert(std::abs(resB->vel.y - (-3.0)) < 1e-4 && "Cartesian velocity Y on stream B must be preserved");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
+// Scenario 64: Zenith Gimbal Singularity Deadband Stability
+// -----------------------------------------------------------------------------
+void test_scenario_64_zenith_singularity_deadband() {
+   std::cout << "[Scenario 64] Zenith Gimbal Singularity Deadband Stability: ";
+   vec origin(0.0, 0.0, 0.0);
+   vec directZenith(0.0, 0.0, 10.0);
+   double yawPure = origin.YawTo(directZenith);
+   double pitchPure = origin.PitchTo(directZenith);
+
+   assert(std::abs(yawPure) < 1e-4 && "Pure zenith target must produce stable 0.0 yaw without singularity jump");
+   assert(std::abs(pitchPure - 90.0) < 1e-4 && "Zenith target pitch must be exactly 90.0 degrees");
+
+   vec noisyZenith(1e-6, -1e-6, 12.0);
+   double yawNoisy = origin.YawTo(noisyZenith);
+   double pitchNoisy = origin.PitchTo(noisyZenith);
+
+   assert(std::abs(yawNoisy) < 1e-4 && "Near-zero horizontal radius must trigger deadband clamp to 0.0 yaw");
+   assert(std::abs(pitchNoisy - 90.0) < 1e-2 && "Pitch must remain within zenith limit");
+   std::cout << "PASSED" << std::endl;
+}
+
+// -----------------------------------------------------------------------------
 // Resource Benchmark Harness for Scenarios
 // -----------------------------------------------------------------------------
 struct ResourceTracker {
@@ -1324,7 +1539,7 @@ void run_benchmarked_scenario(void (*testFunc)()) {
 // -----------------------------------------------------------------------------
 int main() {
    std::cout << "==========================================================================" << std::endl;
-   std::cout << "   RUNNING 56 FUNCTIONAL SCENARIO TESTS WITH RESOURCE BENCHMARKING        " << std::endl;
+   std::cout << "   RUNNING 64 FUNCTIONAL SCENARIO TESTS WITH RESOURCE BENCHMARKING        " << std::endl;
    std::cout << "==========================================================================" << std::endl;
 
    run_benchmarked_scenario(test_scenario_01_stationary_enemy);
@@ -1383,9 +1598,17 @@ int main() {
    run_benchmarked_scenario(test_scenario_54_schmitt_trigger_laser_hysteresis);
    run_benchmarked_scenario(test_scenario_55_yaw_pitch_soft_limit_containment);
    run_benchmarked_scenario(test_scenario_56_reentrant_thread_safe_logging);
+   run_benchmarked_scenario(test_scenario_57_behind_shooter_friendly_fire_safety);
+   run_benchmarked_scenario(test_scenario_58_interception_lead_safety_deadlock_resolution);
+   run_benchmarked_scenario(test_scenario_59_pure_acceleration_lead_estimation);
+   run_benchmarked_scenario(test_scenario_60_turret_orientation_aware_aim_time);
+   run_benchmarked_scenario(test_scenario_61_single_step_slew_zero_latency);
+   run_benchmarked_scenario(test_scenario_62_target_id_quarantine_expiry_and_recycling);
+   run_benchmarked_scenario(test_scenario_63_extractor_stream_isolation);
+   run_benchmarked_scenario(test_scenario_64_zenith_singularity_deadband);
 
    std::cout << "==========================================================================" << std::endl;
-   std::cout << "   ALL 56 SCENARIOS PASSED WITH ZERO FAILURES!                            " << std::endl;
+   std::cout << "   ALL 64 SCENARIOS PASSED WITH ZERO FAILURES!                            " << std::endl;
    std::cout << "   TOTAL WALL TIME: " << std::fixed << std::setprecision(2) << g_resourceStats.totalWallMs << " ms"
              << " | TOTAL CPU TIME: " << g_resourceStats.totalCpuMs << " ms"
              << " | PEAK RSS: " << std::setprecision(1) << (g_resourceStats.peakRssKb / 1024.0) << " MB" << std::endl;

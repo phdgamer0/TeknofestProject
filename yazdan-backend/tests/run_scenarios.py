@@ -51,8 +51,13 @@ def main():
     with open(log_path, "w") as f:
         pass
 
+    # Auto-discover all scenario files
+    scenario_files = sorted([f for f in os.listdir(SCENARIOS_SRC_DIR) if f.startswith("scenario_") and f.endswith(".cpp")])
+    scenario_indices = [int(f.replace("scenario_", "").replace(".cpp", "")) for f in scenario_files if f.replace("scenario_", "").replace(".cpp", "").isdigit()]
+    total_scenarios = len(scenario_indices)
+
     print("=" * 80)
-    print("   BUILDING & RUNNING 56 INDIVIDUAL STANDALONE SCENARIO PROCESSES")
+    print(f"   BUILDING & RUNNING {total_scenarios} INDIVIDUAL STANDALONE SCENARIO PROCESSES")
     print("=" * 80)
 
     # 1. Compile backend objects in parallel
@@ -60,10 +65,10 @@ def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         list(executor.map(compile_object, SRC_FILES))
 
-    # 2. Compile all 56 scenarios in parallel
-    print(f"Compiling 56 standalone scenario binaries in parallel across {os.cpu_count()} CPU cores...")
+    # 2. Compile all scenarios in parallel
+    print(f"Compiling {total_scenarios} standalone scenario binaries in parallel across {os.cpu_count()} CPU cores...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        results = list(executor.map(compile_scenario, range(1, 57)))
+        results = list(executor.map(compile_scenario, scenario_indices))
     if not all(results):
         print("Compilation failed for one or more scenarios.", file=sys.stderr)
         sys.exit(1)
@@ -77,7 +82,7 @@ def main():
     total_cpu_ms = 0.0
     max_peak_rss_mb = 0.0
 
-    for idx in range(1, 57):
+    for idx in scenario_indices:
         id_str = f"{idx:02d}"
         bin_file = os.path.join(SCENARIOS_BIN_DIR, f"scenario_{id_str}")
         res = subprocess.run([bin_file], capture_output=True, text=True, cwd=PROJECT_ROOT)
@@ -86,7 +91,6 @@ def main():
         if res.returncode == 0:
             passed_count += 1
             # Parse timing & rss from output
-            # [Resource Usage] Wall: 0.039 ms | CPU: 0.038 ms | Current RSS: 4.1 MB (Peak: 13.5 MB)
             try:
                 for line in output.splitlines():
                     if "Wall:" in line and "CPU:" in line:
@@ -109,7 +113,7 @@ def main():
             sys.exit(1)
 
     print("=" * 80)
-    print(f"   ALL {passed_count}/56 INDEPENDENT PROCESS SCENARIOS PASSED WITH ZERO FAILURES!")
+    print(f"   ALL {passed_count}/{total_scenarios} INDEPENDENT PROCESS SCENARIOS PASSED WITH ZERO FAILURES!")
     print(f"   TOTAL RUNTIME: Wall: {total_wall_ms:.3f} ms | CPU: {total_cpu_ms:.3f} ms | MAX PEAK RSS: {max_peak_rss_mb:.1f} MB")
     print("=" * 80)
 

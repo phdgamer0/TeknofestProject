@@ -20,7 +20,7 @@ class Extractor {
    }
    [[nodiscard]] std::optional<arch> extract(); // creates a new object
    [[nodiscard]] bool extract(arch& ar);        // rewrites the passed object
-   bool reset();                                // restarts reading from start
+   [[nodiscard]] bool reset();                                // restarts reading from start
 };
 
 template <const char* PATH, typename arch>
@@ -63,7 +63,7 @@ template <const char* PATH, typename arch>
 }
 
 template <const char* PATH, typename arch>
-bool Extractor<PATH, arch>::reset() {
+[[nodiscard]] bool Extractor<PATH, arch>::reset() {
    if (pipe.is_open()) {
       pipe.close();
    }

@@ -951,10 +951,11 @@ int main() {
             }
 
             // 2. Extractor ingests binary packets from PIPE_FILE_PATH and converts Cylindrical -> Cartesian
-            extractor.reset();
-            Object extractedObj;
-            while (extractor.extract(extractedObj)) {
-               nextFrame->detectedObjects[extractedObj.ID] = extractedObj;
+            if (extractor.reset()){
+               Object extractedObj;
+               while (extractor.extract(extractedObj)) {
+                  nextFrame->detectedObjects[extractedObj.ID] = extractedObj;
+               }
             }
          }
          else {
